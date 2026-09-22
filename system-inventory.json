@@ -1,0 +1,215 @@
+{
+  "document": {
+    "name": "TagD Smart — Inventário completo do sistema",
+    "version": "1.0.0",
+    "generatedAt": "2026-09-15T02:19:00Z",
+    "project": "tagd-smart-manager",
+    "checkpoint": "8690e6b5",
+    "language": "pt-BR"
+  },
+  "brand": {
+    "company": "ALF Automações Digitais",
+    "product": "TagD Smart",
+    "category": "Soluções NFC, QR Code dinâmico e gestão de links para empresas locais",
+    "promise": "Ajudar empresas locais a serem encontradas, seguidas e contatadas com um simples toque ou escaneamento.",
+    "products": [
+      { "name": "TagD Google", "description": "Placa ou cartão para facilitar o acesso ao link de avaliação autêntica no Google." },
+      { "name": "TagD WhatsApp", "description": "Placa ou cartão que abre uma conversa com a empresa." },
+      { "name": "TagD Social", "description": "Acesso a Instagram, TikTok e outras redes sociais." },
+      { "name": "TagD Multi", "description": "Página intermediária com Google, WhatsApp, Instagram, TikTok, catálogo e localização." },
+      { "name": "TagD Card", "description": "Cartão de visita digital com URL editável." },
+      { "name": "TagD Gestão", "description": "Painel para administrar empresas, tags, links, QR Codes, acessos e prospecção." }
+    ],
+    "positioningRules": {
+      "recommendedClaims": [
+        "Facilita o acesso à avaliação.",
+        "Links editáveis sem trocar a placa.",
+        "Um toque ou escaneamento para abrir o canal certo.",
+        "Métricas básicas de acesso e campanhas."
+      ],
+      "prohibitedClaims": [
+        "Garantir cinco estrelas.",
+        "Colocar a empresa no topo do Google.",
+        "Aumentar avaliações automaticamente.",
+        "Oferecer benefício em troca de avaliação positiva.",
+        "Produto oficial do Google, Instagram, TikTok ou WhatsApp."
+      ]
+    }
+  },
+  "deployment": {
+    "projectPath": "/home/ubuntu/tagd-smart-manager",
+    "previewUrl": "https://3000-ib9s260lqkwwx5ctul7l2-76fca0ea.us4.manus.computer/?from_webdev=1",
+    "publicUrl": "https://tagdsmart-zxea2bug.manus.space/",
+    "publicStatus": "HTTP 200 confirmado",
+    "latestCheckpointLink": "manus-webdev://8690e6b5",
+    "devServer": {
+      "status": "running",
+      "port": 3000,
+      "strategy": "on_change"
+    }
+  },
+  "stack": {
+    "frontend": ["React 19", "TypeScript", "Vite", "Tailwind CSS", "Radix UI", "shadcn/ui"],
+    "backend": ["Node.js", "Express", "tRPC 11", "TypeScript"],
+    "database": ["MySQL/TiDB", "Drizzle ORM"],
+    "authentication": "Manus OAuth",
+    "qrGeneration": "qrcode 1.5.4 no cliente, com geração local PNG/SVG",
+    "nfc": ["Web NFC NDEFReader quando suportado", "NFC Tools/NXP TagWriter como fallback"]
+  },
+  "database": {
+    "tables": {
+      "users": {
+        "purpose": "Usuários autenticados e permissões",
+        "fields": ["id", "openId", "name", "email", "loginMethod", "role", "createdAt", "updatedAt", "lastSignedIn"],
+        "roles": ["user", "admin"]
+      },
+      "businesses": {
+        "purpose": "Empresas clientes ou prospectadas",
+        "fields": ["id", "name", "segment", "city", "contactName", "phone", "email", "notes", "stage", "consentStatus", "createdAt", "updatedAt"],
+        "stages": ["lead", "contacted", "demo", "proposal", "won", "lost"],
+        "consentStatuses": ["unknown", "allowed", "blocked"]
+      },
+      "tags": {
+        "purpose": "Tags NFC, QR Codes e URLs dinâmicas",
+        "fields": ["id", "businessId", "code", "label", "material", "placement", "destinationType", "destinationUrl", "multilinkConfig", "whatsappMessage", "status", "programmingStatus", "nfcModel", "protectionNote", "programmedAt", "protectedAt", "scans", "lastScannedAt", "createdAt", "updatedAt"],
+        "destinationTypes": ["google", "whatsapp", "instagram", "tiktok", "multilink", "custom"],
+        "statuses": ["active", "paused", "draft"],
+        "programmingStatuses": ["not_programmed", "programmed", "protected"]
+      },
+      "offers": {
+        "purpose": "Ofertas comerciais com validade",
+        "fields": ["id", "title", "segment", "description", "cta", "validUntil", "active", "createdAt"]
+      },
+      "outreachMessages": {
+        "purpose": "Rascunhos e histórico de prospecção",
+        "fields": ["id", "businessId", "offerId", "channel", "subject", "body", "status", "scheduledFor", "sentAt", "createdAt"],
+        "channels": ["whatsapp", "email", "instagram", "manual"],
+        "statuses": ["draft", "queued", "sent", "replied", "opted_out"]
+      }
+    }
+  },
+  "dynamicLinks": {
+    "publicRoute": "GET /t/:code",
+    "physicalPayload": "https://dominio-publico/t/TD<CODIGO_ALEATORIO>",
+    "behavior": [
+      "Localiza a tag pelo código.",
+      "Aceita somente tags ativas.",
+      "Registra e incrementa o contador de acessos.",
+      "Valida o destino HTTP/HTTPS.",
+      "Redireciona para o destino configurado ou renderiza a página MultiLink."
+    ],
+    "benefit": "O destino pode ser alterado no painel sem regravar a tag física.",
+    "pauseBehavior": "Tags pausadas deixam de resolver publicamente."
+  },
+  "multilink": {
+    "purpose": "Página pública estilo Bento/Linktree para vários canais",
+    "supportedLinks": ["Instagram", "Avaliação no Google", "WhatsApp", "Site"],
+    "perLinkToggle": true,
+    "customization": ["título", "subtítulo", "cor de destaque", "fundo", "cor dos botões", "cor do texto dos botões", "logomarca por URL HTTPS"],
+    "preview": {
+      "available": true,
+      "button": "Pré-visualizar no celular",
+      "format": "Moldura de telefone dentro de diálogo",
+      "usesCurrentEditorValues": true,
+      "shows": ["logo", "cores", "título", "subtítulo", "botões de links ativos"]
+    },
+    "physicalUrlRule": "NFC e QR Code usam apenas a URL dinâmica /t/:code; os links internos podem ser alterados sem regravação."
+  },
+  "qrCode": {
+    "generation": "Local no navegador",
+    "formats": ["PNG", "SVG"],
+    "download": true,
+    "usesSameUrlAsNfc": true,
+    "component": "client/src/components/LocalQr.tsx"
+  },
+  "nfc": {
+    "supportedOperation": "Gravar e ler URL NDEF",
+    "webApi": "NDEFReader",
+    "webRequirements": ["Android compatível", "Chrome compatível", "HTTPS", "NFC ativado", "cartão aproximado fisicamente"],
+    "panelActions": ["Gravar URL", "Ler/verificar", "Copiar URL para NFC Tools", "Confirmar programação", "Marcar protegida após senha"],
+    "mobileUx": ["botões grandes de 56px", "layout de uma coluna em telas pequenas", "loader durante operação", "mensagens de sucesso e erro", "botão de cópia destacado"],
+    "fallback": {
+      "app": ["NFC Tools", "NXP TagWriter"],
+      "steps": ["Copiar URL dinâmica", "Abrir NFC Tools no Android", "Escolher Gravar", "Adicionar registro URL", "Colar URL", "Aproximar cartão", "Ler para conferir", "Proteger gravação por senha"]
+    },
+    "importantLimitation": "Um navegador em computador ou iPhone normalmente não acessa o rádio NFC para gravar o cartão. O servidor também não consegue gravar fisicamente o cartão; a gravação exige o celular e a aproximação física.",
+    "passwordProtection": {
+      "supportedBy": "Aplicativo NFC e chip compatível, como NTAG213/215/216",
+      "purpose": "Impedir regravação física não autorizada mantendo a leitura pública",
+      "notSameAs": "A senha física do chip não é a senha do painel TagD Smart",
+      "securityNote": "Não armazenar senhas NFC em texto aberto nem em URL/QR Code."
+    }
+  },
+  "api": {
+    "authentication": ["auth.me", "auth.logout"],
+    "dashboard": ["dashboard"],
+    "business": ["business.create", "business.updateStage"],
+    "tags": ["tag.create", "tag.updateDestination", "tag.updateMultilink", "tag.updatePhysicalStatus", "tag.toggle"],
+    "offers": ["offer.create"],
+    "outreach": ["outreach.createDraft", "outreach.markOptedOut"],
+    "security": ["protectedProcedure para operações administrativas", "validação de destinos HTTP/HTTPS", "bloqueio de credenciais embutidas", "códigos aleatórios para tags"]
+  },
+  "interface": {
+    "page": "/",
+    "tabs": ["Visão geral", "Programador NFC", "Tags e links", "Prospecção", "Ofertas"],
+    "overview": ["métricas de empresas", "tags ativas", "acessos registrados", "ofertas", "funil de prospecção", "mensagem de abordagem", "atalhos Cadastrar empresa e Criar tag"],
+    "tagsAndLinks": ["criar tag", "selecionar empresa", "tipo Google/WhatsApp/Instagram/TikTok/MultiLink/custom", "link de avaliação do Google", "editar destino", "copiar URL", "gravar NFC", "ler NFC", "testar link", "baixar QR", "status físico"],
+    "prospecting": ["cadastrar empresa", "segmento", "telefone/WhatsApp", "listar empresas", "etapas do funil"],
+    "offers": ["título", "benefícios e condições", "validade em dias", "listar ofertas"],
+    "login": "Painel protegido por Manus OAuth"
+  },
+  "securityAndCompliance": {
+    "publicDestinationProtocols": ["http:", "https:"],
+    "blocked": ["javascript:", "data:", "credenciais na URL"],
+    "googleReviews": "O sistema facilita o acesso ao link, mas não controla a opinião, não garante nota e não deve oferecer incentivo por avaliação positiva.",
+    "prospecting": "Mensagens devem ser rascunhadas/revisadas e enviadas somente com base legal, contato permitido e respeito a opt-out.",
+    "adminRequirement": "Cadastros e alterações administrativas exigem autenticação."
+  },
+  "keyFiles": {
+    "frontend": ["client/src/pages/Home.tsx", "client/src/components/LocalQr.tsx", "client/src/components/ui/dialog.tsx", "client/src/const.ts", "client/src/_core/hooks/useAuth.ts"],
+    "backend": ["server/routers.ts", "server/db.ts", "server/linkSafety.ts", "server/_core/index.ts", "server/_core/oauth.ts"],
+    "database": ["drizzle/schema.ts", "drizzle/0000_mute_triathlon.sql", "drizzle/0001_whole_nighthawk.sql", "drizzle/0002_outstanding_roxanne_simpson.sql", "drizzle/0003_lyrical_black_bolt.sql"],
+    "documentation": ["docs-mvp.md", "system-inventory.json", "README.md"],
+    "tests": ["server/auth.logout.test.ts"]
+  },
+  "validation": {
+    "typescript": "passed",
+    "unitTests": { "command": "pnpm test", "result": "1 test file passed, 1 test passed" },
+    "productionBuild": { "command": "pnpm build", "result": "passed" },
+    "viteHmr": "Home.tsx reload confirmed without new syntax error",
+    "publicHttpCheck": "HTTP 200 confirmed for public domain",
+    "knownWarning": "Vite reports a bundle chunk larger than 500 kB; build remains successful."
+  },
+  "history": {
+    "checkpoints": [
+      { "version": "563310f6", "description": "MVP inicial com banco, painel, tags, CRM e ofertas" },
+      { "version": "ea6d0606", "description": "Hardening de URLs e documentação" },
+      { "version": "9b231601", "description": "Fluxo operacional de criação, teste e proteção NFC" },
+      { "version": "a31be393", "description": "Cópia rápida, status, contador, downloads QR e skill reutilizável" },
+      { "version": "258be72c", "description": "MultiLink/Bento e gravação Web NFC assistida" },
+      { "version": "108be193", "description": "Personalização visual MultiLink" },
+      { "version": "3240c8be", "description": "Leitura NFC e documentação de senha" },
+      { "version": "89e45066", "description": "Login e Programador NFC" },
+      { "version": "10dbc62e", "description": "Interface NFC mobile e estados visuais" },
+      { "version": "d2c959a8", "description": "Onboarding, Google e fallback NFC Tools" },
+      { "version": "50353e84", "description": "Fluxo de cadastro Google/NFC e cópia robusta" },
+      { "version": "8690e6b5", "description": "Prévia mobile MultiLink e instruções NFC destacadas", "current": true }
+    ]
+  },
+  "knownLimitations": [
+    "A gravação NFC por aproximação não funciona em qualquer navegador; depende de Android/Chrome/Web NFC ou aplicativo dedicado.",
+    "A conta administrativa precisa concluir o login OAuth antes de cadastrar dados.",
+    "A senha física da tag é configurada no NFC Tools/NXP TagWriter, não automaticamente pelo servidor.",
+    "O domínio público atual é um domínio de projeto/preview; ainda falta domínio definitivo próprio.",
+    "O envio automático de mensagens comerciais não está implementado e deve respeitar consentimento e opt-out.",
+    "Não há ainda gestão multi-tenant completa por empresa cliente."
+  ],
+  "recommendedNextSteps": [
+    "Testar em um Android real com NFC ativado usando uma NTAG213/215 não protegida.",
+    "Adicionar autenticação e registro de senha NFC somente no aplicativo externo, nunca em texto aberto no sistema.",
+    "Criar domínio definitivo, política de privacidade, termos e fluxo de consentimento.",
+    "Adicionar testes automatizados para business.create, tag.create, redirecionamento e contador de acessos.",
+    "Adicionar gestão de clientes/organizações e permissões por empresa.",
+    "Adicionar upload de logomarca para armazenamento próprio em vez de depender de URL externa."
+  ]
+}

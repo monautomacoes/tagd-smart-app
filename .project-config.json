@@ -1,0 +1,42 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://8UREh6t3U1duKsq.root:cnQ5n5D3sPYciCO59p2k@gateway06.us-east-1.prod.aws.tidbcloud.com:4000/Zxea2BUG7WXRRPoEp2SUom?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "https://7f0548f6b28a1758d9bf7be630d36cb4.artifacts.cloudflare.net/git/prod/Zxea2BUG7WXRRPoEp2SUom.git",
+    "expiration": "2026-09-16T17:16:45.226Z",
+    "token": "art_v2_x_eec41374422d3cbc433ea3ffcafabb212d7f7165?expires=1789579005",
+    "backend": "GIT_BACKEND_ARTIFACTS"
+  },
+  "name": "tagd-smart-manager",
+  "path": "/home/ubuntu/tagd-smart-manager",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "nGXrdKBH8SmtiQzgzYgJ4K",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "JWT_SECRET": "PromiWaj8KbC5W89AsYs45",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "monautomacoes8",
+    "OWNER_OPEN_ID": "WFoK8V7NyRimMwBJu8GU8m",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "6f7cd0d1-f95f-4fd0-bc3b-b1380f09594b",
+    "VITE_APP_ID": "Zxea2BUG7WXRRPoEp2SUom",
+    "VITE_APP_LOGO": "https://files.manuscdn.com/user_upload_by_module/web_dev_logo/310519663961758854/QIadBZxRMlgDVAXK.png",
+    "VITE_APP_TITLE": "TagD Smart | Gestão de Tags",
+    "VITE_FRONTEND_FORGE_API_KEY": "Y9vsysUqrGX4i75jMqbmyw",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}
