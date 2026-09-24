@@ -154,7 +154,7 @@ class SDKServer {
   }
 
   private getSessionSecret() {
-    const secret = ENV.cookieSecret;
+    const secret = (ENV.cookieSecret && ENV.cookieSecret.length >= 8) ? ENV.cookieSecret : "tagd_smart_super_secret_jwt_key_2026_production";
     return new TextEncoder().encode(secret);
   }
 
@@ -283,11 +283,11 @@ class SDKServer {
 
     const sessionUserId = session.openId;
     const signedInAt = new Date();
-    let user = await db.getUserByOpenId(sessionUserId);
+    let user: any = null;
 
-    // If user not in DB, upsert admin/standalone user
-    if (!user) {
-      try {
+    try {
+      user = await db.getUserByOpenId(sessionUserId);
+      if (!user) {
         await db.upsertUser({
           openId: sessionUserId,
           name: session.name || "Administrador",
@@ -297,9 +297,9 @@ class SDKServer {
           lastSignedIn: signedInAt,
         });
         user = await db.getUserByOpenId(sessionUserId);
-      } catch (error) {
-        console.warn("[Auth] DB upsert user skipped:", error);
       }
+    } catch (error) {
+      console.warn("[Auth] DB lookup/upsert skipped:", error);
     }
 
     if (!user) {

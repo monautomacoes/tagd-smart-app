@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { COOKIE_NAME } from "@shared/const";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useMemo } from "react";
 
@@ -31,8 +32,15 @@ export function useAuth(options?: UseAuthOptions) {
 
   const login = useCallback(async (password?: string) => {
     const result = await loginMutation.mutateAsync({ password });
-    utils.auth.me.setData(undefined, result as any);
-    await utils.auth.me.invalidate();
+    if (result) {
+      try {
+        if ((result as any).token) {
+          sessionStorage.setItem("manus-cookie", `${COOKIE_NAME}=${(result as any).token}`);
+        }
+      } catch {}
+      utils.auth.me.setData(undefined, result as any);
+      await utils.auth.me.invalidate();
+    }
     return result;
   }, [loginMutation, utils]);
 
