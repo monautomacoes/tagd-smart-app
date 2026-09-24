@@ -1,0 +1,3 @@
+ALTER TABLE `outreachMessages` ADD CONSTRAINT `outreachMessages_businessId_businesses_id_fk` FOREIGN KEY (`businessId`) REFERENCES `businesses`(`id`) ON DELETE cascade ON UPDATE cascade;--> statement-breakpoint
+ALTER TABLE `outreachMessages` ADD CONSTRAINT `outreachMessages_offerId_offers_id_fk` FOREIGN KEY (`offerId`) REFERENCES `offers`(`id`) ON DELETE set null ON UPDATE cascade;--> statement-breakpoint
+ALTER TABLE `tags` ADD CONSTRAINT `tags_businessId_businesses_id_fk` FOREIGN KEY (`businessId`) REFERENCES `businesses`(`id`) ON DELETE cascade ON UPDATE cascade;

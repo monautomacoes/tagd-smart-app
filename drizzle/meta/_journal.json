@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1789416571731,
+      "tag": "0000_mute_triathlon",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1789416703833,
+      "tag": "0001_whole_nighthawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789417512151,
+      "tag": "0002_outstanding_roxanne_simpson",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1789422548616,
+      "tag": "0003_lyrical_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1789492850081,
+      "tag": "0004_thankful_gorgon",
+      "breakpoints": true
+    }
+  ]
+}
