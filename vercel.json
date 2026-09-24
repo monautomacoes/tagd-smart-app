@@ -5,15 +5,15 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api"
     },
     {
       "source": "/t/(.*)",
-      "destination": "/api/index.ts"
+      "destination": "/api"
     },
     {
       "source": "/modelo",
-      "destination": "/api/index.ts"
+      "destination": "/api"
     },
     {
       "source": "/(.*)",
