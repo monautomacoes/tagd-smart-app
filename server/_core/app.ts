@@ -93,14 +93,13 @@ export function createApp(): express.Express {
     }
   });
 
-  app.use(
-    "/api/trpc",
-    apiRateLimiter,
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
+  const trpcHandler = createExpressMiddleware({
+    router: appRouter,
+    createContext,
+  });
+
+  app.use("/api/trpc", apiRateLimiter, trpcHandler);
+  app.use("/trpc", apiRateLimiter, trpcHandler);
 
   return app;
 }
