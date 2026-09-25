@@ -20,14 +20,59 @@ import {
   Plus,
   RefreshCw,
   Sliders,
-  ChevronRight,
-  ExternalLink,
+  FileCode,
+  ShieldCheck,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export type PrintFormat = "10x10" | "5.4x8.5" | "10x15";
 export type PlateTheme = "dark-gold" | "acrylic-blue";
+export type PrintQuality = "4k-ultra" | "600dpi";
+
+// Standard CRC32 table for embedding physical PNG metadata (pHYs chunk)
+function crc32(buf: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// Injects standard pHYs chunk to declare 600 DPI in PNG header for print software
+function createPhysChunk(dpi: number): Uint8Array {
+  const ppm = Math.round(dpi / 0.0254); // Pixels per meter (e.g. 600 DPI = 23622 ppm)
+  const chunk = new Uint8Array(21);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, 9); // Length
+  chunk[4] = 0x70; // 'p'
+  chunk[5] = 0x48; // 'H'
+  chunk[6] = 0x79; // 'y'
+  chunk[7] = 0x73; // 's'
+  view.setUint32(8, ppm);
+  view.setUint32(12, ppm);
+  chunk[16] = 1; // Unit: Meter
+  const crc = crc32(chunk.subarray(4, 17));
+  view.setUint32(17, crc);
+  return chunk;
+}
+
+async function addDpiToPng(blob: Blob, dpi: number): Promise<Blob> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  // Verify PNG signature
+  if (bytes[0] !== 0x89 || bytes[1] !== 0x50) return blob;
+  const phys = createPhysChunk(dpi);
+  const combined = new Uint8Array(bytes.length + phys.length);
+  combined.set(bytes.subarray(0, 33), 0);
+  combined.set(phys, 33);
+  combined.set(bytes.subarray(33), 33 + phys.length);
+  return new Blob([combined], { type: "image/png" });
+}
 
 interface PlatePrintGeneratorProps {
   businesses: Array<{
@@ -61,11 +106,10 @@ export function PlatePrintGenerator({
   const [selectedBusinessId, setSelectedBusinessId] = useState<number>(
     defaultBusinessId || (businesses[0]?.id ?? 0)
   );
-  const [selectedTagId, setSelectedTagId] = useState<number>(
-    defaultTagId || 0
-  );
+  const [selectedTagId, setSelectedTagId] = useState<number>(defaultTagId || 0);
   const [format, setFormat] = useState<PrintFormat>("10x10");
   const [theme, setTheme] = useState<PlateTheme>("dark-gold");
+  const [quality, setQuality] = useState<PrintQuality>("4k-ultra");
 
   // Custom texts
   const currentBusiness = useMemo(
@@ -89,9 +133,6 @@ export function PlatePrintGenerator({
   const [customFooterTagline, setCustomFooterTagline] = useState(
     "Sua opinião de 5 estrelas é muito importante para nós!"
   );
-  const [customFooterCredit, setCustomFooterCredit] = useState(
-    "CHIP NFC NTAG215 • ALF AUTOMAÇÃO"
-  );
 
   // Sync custom business name with selected business
   useEffect(() => {
@@ -107,14 +148,18 @@ export function PlatePrintGenerator({
   const [batchStartNum, setBatchStartNum] = useState("1");
   const [batchUrl, setBatchUrl] = useState("");
 
-  // QR Code data URL
+  // Ultra HD QR Code data URL
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [isGeneratingPng, setIsGeneratingPng] = useState(false);
+  const [isGeneratingSvg, setIsGeneratingSvg] = useState(false);
 
   // Compute tag redirect URL
   const targetUrl = useMemo(() => {
     if (currentTag) {
-      const origin = typeof window !== "undefined" ? window.location.origin : "https://tagd-smart-app.vercel.app";
+      const origin =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://tagd-smart-app.vercel.app";
       return `${origin}/t/${currentTag.code}`;
     }
     return currentBusiness?.phone
@@ -122,11 +167,11 @@ export function PlatePrintGenerator({
       : "https://g.page/review";
   }, [currentTag, currentBusiness]);
 
-  // Generate QR Code with high resolution
+  // Generate QR Code with 3000px resolution and maximum error correction (Level H)
   useEffect(() => {
     if (!targetUrl) return;
     QRCode.toDataURL(targetUrl, {
-      width: 1024,
+      width: 3000,
       margin: 1,
       errorCorrectionLevel: "H",
       color: {
@@ -182,6 +227,8 @@ export function PlatePrintGenerator({
           widthMm: 100,
           heightMm: 100,
           printClass: "print-10x10",
+          res4k: "4000 x 4000 px (~1016 DPI)",
+          res600: "2362 x 2362 px (600 DPI)",
         };
       case "5.4x8.5":
         return {
@@ -190,6 +237,8 @@ export function PlatePrintGenerator({
           widthMm: 54,
           heightMm: 85,
           printClass: "print-card",
+          res4k: "2550 x 4016 px (~1200 DPI)",
+          res600: "1276 x 2008 px (600 DPI)",
         };
       case "10x15":
         return {
@@ -198,6 +247,8 @@ export function PlatePrintGenerator({
           widthMm: 100,
           heightMm: 150,
           printClass: "print-10x15",
+          res4k: "3600 x 5400 px (~914 DPI)",
+          res600: "2362 x 3543 px (600 DPI)",
         };
     }
   }, [format]);
@@ -214,7 +265,6 @@ export function PlatePrintGenerator({
 
     const is10x10 = format === "10x10";
     const isCard = format === "5.4x8.5";
-    const is10x15 = format === "10x15";
 
     const widthCm = is10x10 ? "10cm" : isCard ? "5.4cm" : "10cm";
     const heightCm = is10x10 ? "10cm" : isCard ? "8.5cm" : "15cm";
@@ -279,13 +329,6 @@ export function PlatePrintGenerator({
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            /* Linhas de corte guia para gráfica */
-            .crop-marks {
-              position: absolute;
-              inset: 0;
-              border: 0.5px dashed rgba(255,255,255,0.4);
-              pointer-events: none;
-            }
             @media print {
               body {
                 background: transparent;
@@ -325,23 +368,37 @@ export function PlatePrintGenerator({
     printWindow.document.close();
   };
 
-  // Ultra HD PNG Download via HTML5 Canvas
+  // Ultra HD 4K & 600+ DPI PNG Download
   const handleDownloadPng = async () => {
     try {
       setIsGeneratingPng(true);
       const is10x10 = format === "10x10";
       const isCard = format === "5.4x8.5";
 
-      // 300 DPI canvas dimensions
-      // 10cm = 3.937 inches * 300 DPI = ~1181px. Let's use 2000px for crystal-clear print quality!
-      const canvasWidth = isCard ? 1275 : 2000;
-      const canvasHeight = isCard ? 2008 : is10x10 ? 2000 : 3000;
+      // 4K Ultra HD Dimensions (up to 4000px, >1000 DPI)
+      let canvasWidth = 4000;
+      let canvasHeight = 4000;
+
+      if (isCard) {
+        canvasWidth = quality === "4k-ultra" ? 2550 : 1276;
+        canvasHeight = quality === "4k-ultra" ? 4016 : 2008;
+      } else if (is10x10) {
+        canvasWidth = quality === "4k-ultra" ? 4000 : 2362;
+        canvasHeight = quality === "4k-ultra" ? 4000 : 2362;
+      } else {
+        // 10x15
+        canvasWidth = quality === "4k-ultra" ? 3600 : 2362;
+        canvasHeight = quality === "4k-ultra" ? 5400 : 3543;
+      }
 
       const canvas = document.createElement("canvas");
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { alpha: false });
       if (!ctx) throw new Error("Não foi possível inicializar o Canvas.");
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
       // Background Top
       const isDark = theme === "dark-gold";
@@ -357,23 +414,23 @@ export function PlatePrintGenerator({
       const ribbonHeight = canvasHeight * 0.016;
       const ribbonY = dividerY - ribbonHeight / 2;
       const ribbonGrad = ctx.createLinearGradient(0, 0, canvasWidth, 0);
-      ribbonGrad.addColorStop(0.0, "#EA4335"); // Red
-      ribbonGrad.addColorStop(0.3, "#FBBC05"); // Yellow
-      ribbonGrad.addColorStop(0.65, "#34A853"); // Green
-      ribbonGrad.addColorStop(1.0, "#4285F4"); // Blue
+      ribbonGrad.addColorStop(0.0, "#EA4335");
+      ribbonGrad.addColorStop(0.3, "#FBBC05");
+      ribbonGrad.addColorStop(0.65, "#34A853");
+      ribbonGrad.addColorStop(1.0, "#4285F4");
       ctx.fillStyle = ribbonGrad;
       ctx.fillRect(0, ribbonY, canvasWidth, ribbonHeight);
 
-      // Draw Top Stars
+      // Draw Top Stars (5 Stars)
       const starCount = 5;
       const starSize = canvasWidth * 0.055;
       const starsTotalWidth = starCount * starSize * 1.5;
-      const starStartX = (canvasWidth - starsTotalWidth) / 2 + (starSize * 0.75);
+      const starStartX = (canvasWidth - starsTotalWidth) / 2 + starSize * 0.75;
       const starY = canvasHeight * 0.08;
 
       ctx.fillStyle = "#fbbf24";
       ctx.shadowColor = "rgba(251, 191, 36, 0.6)";
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = Math.round(canvasWidth * 0.01);
       for (let i = 0; i < starCount; i++) {
         drawStar(ctx, starStartX + i * (starSize * 1.45), starY, 5, starSize, starSize / 2);
       }
@@ -381,7 +438,7 @@ export function PlatePrintGenerator({
 
       // Draw Header Text
       ctx.textAlign = "center";
-      ctx.fillStyle = isDark ? "#ffffff" : "#ffffff";
+      ctx.fillStyle = "#ffffff";
       ctx.font = `bold ${Math.round(canvasWidth * 0.038)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       ctx.fillText(customTitle, canvasWidth / 2, starY + canvasHeight * 0.075);
 
@@ -397,19 +454,19 @@ export function PlatePrintGenerator({
 
       ctx.fillStyle = goldGrad;
       ctx.shadowColor = "rgba(245, 158, 11, 0.4)";
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = Math.round(canvasWidth * 0.015);
       ctx.font = `900 ${Math.round(canvasWidth * 0.068)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
       const displayName = customBusinessName || currentBusiness?.name?.toUpperCase() || "DANI PONTELLO";
       ctx.fillText(displayName, canvasWidth / 2, goldY);
       ctx.shadowBlur = 0;
 
       // Golden underline
-      const nameWidth = Math.min(ctx.measureText(displayName).width + 80, canvasWidth * 0.85);
+      const nameWidth = Math.min(ctx.measureText(displayName).width + canvasWidth * 0.05, canvasWidth * 0.85);
       ctx.strokeStyle = goldGrad;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = Math.max(4, Math.round(canvasWidth * 0.003));
       ctx.beginPath();
-      ctx.moveTo((canvasWidth - nameWidth) / 2, goldY + 14);
-      ctx.lineTo((canvasWidth + nameWidth) / 2, goldY + 14);
+      ctx.moveTo((canvasWidth - nameWidth) / 2, goldY + canvasHeight * 0.015);
+      ctx.lineTo((canvasWidth + nameWidth) / 2, goldY + canvasHeight * 0.015);
       ctx.stroke();
 
       // Top Tagline
@@ -425,7 +482,7 @@ export function PlatePrintGenerator({
       ctx.arc(canvasWidth / 2, badgeY, badgeRadius, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-      ctx.shadowBlur = 25;
+      ctx.shadowBlur = Math.round(canvasWidth * 0.015);
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.restore();
@@ -454,13 +511,13 @@ export function PlatePrintGenerator({
       ctx.fillText("Aproxime seu celular", leftColCenterX, bottomContentTop);
 
       // Draw Smartphone vector
-      const phoneW = canvasWidth * 0.20;
+      const phoneW = canvasWidth * 0.2;
       const phoneH = phoneW * 1.8;
       const phoneX = leftColCenterX - phoneW / 2;
       const phoneY = bottomContentTop + canvasHeight * 0.03;
 
       ctx.strokeStyle = "#1e293b";
-      ctx.lineWidth = canvasWidth * 0.012;
+      ctx.lineWidth = Math.max(6, Math.round(canvasWidth * 0.012));
       ctx.lineJoin = "round";
       ctx.strokeRect(phoneX, phoneY, phoneW, phoneH);
 
@@ -471,7 +528,7 @@ export function PlatePrintGenerator({
 
       // Radio waves radiating from phone
       ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = canvasWidth * 0.008;
+      ctx.lineWidth = Math.max(4, Math.round(canvasWidth * 0.008));
       for (let r = 1; r <= 3; r++) {
         ctx.beginPath();
         ctx.arc(phoneX + phoneW * 0.85, phoneY + phoneH * 0.35, phoneW * (0.25 * r), -Math.PI * 0.8, -Math.PI * 0.1);
@@ -498,7 +555,7 @@ export function PlatePrintGenerator({
         const qrImg = new Image();
         await new Promise<void>((resolve) => {
           qrImg.onload = () => {
-            // Draw clean white backdrop
+            // Crisp rendering
             ctx.fillStyle = "#ffffff";
             ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
             ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
@@ -538,19 +595,138 @@ export function PlatePrintGenerator({
         canvasHeight - canvasHeight * 0.025
       );
 
-      // Download trigger
-      const link = document.createElement("a");
-      link.download = `PLACA-${displayName}-${plateNumberLabel}-${format}.png`;
-      link.href = canvas.toDataURL("image/png");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      toast.success("Imagem Ultra HD PNG (300 DPI) baixada com sucesso!");
+      // Convert Canvas to Blob and inject 600 DPI / 1000 DPI pHYs Chunk
+      canvas.toBlob(
+        async (rawBlob) => {
+          if (!rawBlob) throw new Error("Falha ao exportar imagem.");
+          const targetDpi = quality === "4k-ultra" ? 1000 : 600;
+          const finalBlob = await addDpiToPng(rawBlob, targetDpi);
+          const link = document.createElement("a");
+          link.download = `PLACA-${displayName}-${plateNumberLabel}-${format}-${quality}.png`;
+          link.href = URL.createObjectURL(finalBlob);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(link.href);
+          toast.success(
+            `Imagem Ultra HD 4K (${targetDpi} DPI com metadados físicos) baixada com sucesso!`
+          );
+        },
+        "image/png"
+      );
     } catch (err: any) {
       console.error(err);
       toast.error(`Erro ao gerar PNG: ${err?.message || "falha no canvas"}`);
     } finally {
       setIsGeneratingPng(false);
+    }
+  };
+
+  // Download Vector SVG (Infinite DPI)
+  const handleDownloadSvg = () => {
+    try {
+      setIsGeneratingSvg(true);
+      const isCard = format === "5.4x8.5";
+      const is10x10 = format === "10x10";
+      const widthMm = isCard ? 54 : 100;
+      const heightMm = isCard ? 85 : is10x10 ? 100 : 150;
+      const viewBoxWidth = 1000;
+      const viewBoxHeight = Math.round((heightMm / widthMm) * 1000);
+      const displayName = customBusinessName || currentBusiness?.name?.toUpperCase() || "DANI PONTELLO";
+      const plateNumberLabel = currentTag?.plateNumber || currentTag?.code || displayName;
+
+      const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${widthMm}mm" height="${heightMm}mm" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <linearGradient id="googleRibbon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EA4335" />
+      <stop offset="30%" stop-color="#FBBC05" />
+      <stop offset="65%" stop-color="#34A853" />
+      <stop offset="100%" stop-color="#4285F4" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Fundo Superior -->
+  <rect x="0" y="0" width="${viewBoxWidth}" height="${viewBoxHeight}" fill="${theme === "dark-gold" ? "#060709" : "#0284c7"}" />
+
+  <!-- Fundo Inferior Branco -->
+  <rect x="0" y="${Math.round(viewBoxHeight * 0.44)}" width="${viewBoxWidth}" height="${Math.round(viewBoxHeight * 0.56)}" fill="#ffffff" />
+
+  <!-- Fita Colorida Google -->
+  <rect x="0" y="${Math.round(viewBoxHeight * 0.435)}" width="${viewBoxWidth}" height="${Math.round(viewBoxHeight * 0.016)}" fill="url(#googleRibbon)" />
+
+  <!-- 5 Estrelas Douradas -->
+  <g fill="#fbbf24" stroke="#d97706" stroke-width="2">
+    ${[...Array(5)]
+      .map(
+        (_, i) =>
+          `<polygon points="10,1 4,19.8 19,7.8 1,7.8 16,19.8" transform="translate(${350 + i * 65}, ${Math.round(viewBoxHeight * 0.065)}) scale(2.8)" />`
+      )
+      .join("")}
+  </g>
+
+  <!-- Textos do Topo -->
+  <text x="500" y="${Math.round(viewBoxHeight * 0.16)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#ffffff" letter-spacing="3">${customTitle}</text>
+  <text x="500" y="${Math.round(viewBoxHeight * 0.22)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#ffffff" letter-spacing="2">${customSubtitle}</text>
+
+  <!-- Nome da Empresa em Ouro -->
+  <text x="500" y="${Math.round(viewBoxHeight * 0.31)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="62" fill="url(#goldGrad)" letter-spacing="2" filter="url(#shadow)">${displayName}</text>
+  <line x1="200" y1="${Math.round(viewBoxHeight * 0.33)}" x2="800" y2="${Math.round(viewBoxHeight * 0.33)}" stroke="url(#goldGrad)" stroke-width="4" />
+
+  <!-- Subtítulo -->
+  <text x="500" y="${Math.round(viewBoxHeight * 0.38)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="500" font-size="24" fill="#e2e8f0">${customFooterTagline}</text>
+
+  <!-- Badge Google Central -->
+  <circle cx="500" cy="${Math.round(viewBoxHeight * 0.443)}" r="75" fill="#ffffff" filter="url(#shadow)" />
+  <g transform="translate(450, ${Math.round(viewBoxHeight * 0.443 - 50)}) scale(2.1)">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </g>
+
+  <!-- Coluna Esquerda: NFC -->
+  <text x="270" y="${Math.round(viewBoxHeight * 0.55)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#0f172a">Aproxime seu celular</text>
+  <rect x="200" y="${Math.round(viewBoxHeight * 0.58)}" width="140" height="240" rx="20" fill="#f8fafc" stroke="#1e293b" stroke-width="8"/>
+  <rect x="235" y="${Math.round(viewBoxHeight * 0.68)}" width="70" height="40" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="270" y="${Math.round(viewBoxHeight * 0.71)}" text-anchor="middle" font-family="monospace" font-weight="900" font-size="22" fill="#0f172a">NFC</text>
+  <text x="270" y="${Math.round(viewBoxHeight * 0.88)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#64748b">Sem aplicativo • Direto no celular</text>
+
+  <!-- Centro: OU -->
+  <circle cx="500" cy="${Math.round(viewBoxHeight * 0.70)}" r="32" fill="#f1f5f9" />
+  <text x="500" y="${Math.round(viewBoxHeight * 0.71)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="30" fill="#0f172a">OU</text>
+
+  <!-- Coluna Direita: QR Code -->
+  ${qrDataUrl ? `<image href="${qrDataUrl}" x="575" y="${Math.round(viewBoxHeight * 0.57)}" width="270" height="270" />` : ""}
+  <text x="710" y="${Math.round(viewBoxHeight * 0.88)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#0f172a">Aponte a câmera</text>
+  <text x="710" y="${Math.round(viewBoxHeight * 0.92)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="22" fill="#0284c7">⚡ Avalie em 3 segundos</text>
+
+  <!-- Rodapé Técnico -->
+  <text x="500" y="${Math.round(viewBoxHeight * 0.975)}" text-anchor="middle" font-family="monospace" font-size="16" fill="#94a3b8" letter-spacing="3">CHIP NFC NTAG215 • ID: ${plateNumberLabel} • ALF AUTOMAÇÃO</text>
+</svg>`;
+
+      const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+      const link = document.createElement("a");
+      link.download = `PLACA-${displayName}-${plateNumberLabel}-${format}-VETOR.svg`;
+      link.href = URL.createObjectURL(blob);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      toast.success("Vetor SVG (DPI Infinito para Laser e Gráfica) baixado!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao gerar SVG: ${err?.message || "falha na geração"}`);
+    } finally {
+      setIsGeneratingSvg(false);
     }
   };
 
@@ -566,23 +742,26 @@ export function PlatePrintGenerator({
             <Badge variant="outline" className="text-white/80 border-white/20">
               NFC NTAG215 + QR Code Dinâmico
             </Badge>
+            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">
+              💎 4K Ultra HD & 600+ DPI
+            </Badge>
           </div>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-white md:text-3xl">
             Gerador de Placas & Cartões para Impressão
           </h2>
           <p className="mt-1 text-sm text-slate-300 max-w-2xl">
-            Gere artes em alta resolução (300 DPI) prontas para recorte em acrílico ou adesivo.
-            Imprima uma única placa ou gere lotes de até 200 placas sequenciais com links dinâmicos.
+            Exporte arquivos em <b>4K Ultra HD (600 a 1200 DPI)</b> e <b>Vetor SVG infinito</b> prontos
+            para envio à gráfica rápida, fabricantes de acrílico ou corte a laser.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Button
             onClick={() => setBatchModalOpen(true)}
             className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-lg"
           >
             <Layers className="mr-2 h-4 w-4" />
-            Gerar Lote de Placas (1 a 100)
+            Gerar Lote (1 a 100)
           </Button>
 
           <Button
@@ -591,20 +770,34 @@ export function PlatePrintGenerator({
             className="border-white/30 bg-white/10 text-white hover:bg-white/20 font-semibold"
           >
             <Printer className="mr-2 h-4 w-4" />
-            Imprimir / Salvar PDF
+            Imprimir / PDF
+          </Button>
+
+          <Button
+            onClick={handleDownloadSvg}
+            disabled={isGeneratingSvg}
+            variant="outline"
+            className="border-cyan-400/40 bg-cyan-950/40 text-cyan-200 hover:bg-cyan-900/60 font-bold"
+          >
+            {isGeneratingSvg ? (
+              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileCode className="mr-2 h-4 w-4 text-cyan-300" />
+            )}
+            Vetor SVG (Infinito)
           </Button>
 
           <Button
             onClick={handleDownloadPng}
             disabled={isGeneratingPng}
-            className="bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold shadow-lg"
+            className="bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600 text-slate-950 font-extrabold shadow-lg"
           >
             {isGeneratingPng ? (
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Download className="mr-2 h-4 w-4" />
             )}
-            Baixar PNG HD (Gráfica)
+            Baixar PNG 4K (600+ DPI)
           </Button>
         </div>
       </div>
@@ -621,7 +814,7 @@ export function PlatePrintGenerator({
                 Formato & Dimensões Físicas
               </CardTitle>
               <CardDescription>
-                Selecione o gabarito do produto físico que você vai produzir.
+                Selecione o tamanho físico para a sua placa ou cartão de visita.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -675,42 +868,82 @@ export function PlatePrintGenerator({
                 </button>
               </div>
 
-              {/* Theme Selector */}
-              <div>
-                <Label className="text-xs font-semibold text-slate-700">Tema Visual</Label>
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setTheme("dark-gold")}
-                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border-2 text-left transition ${
-                      theme === "dark-gold"
-                        ? "border-amber-500 bg-slate-900 text-white shadow-sm"
-                        : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
-                    }`}
-                  >
-                    <div className="h-5 w-5 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 shadow-sm" />
-                    <div>
-                      <p className="text-xs font-bold leading-none">Preto Luxo Dourado</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Padrão da referência</p>
-                    </div>
-                  </button>
+              {/* Theme & Quality Selector */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Tema Visual</Label>
+                  <div className="grid grid-cols-1 gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTheme("dark-gold")}
+                      className={`flex items-center gap-2 p-2 rounded-xl border-2 text-left transition ${
+                        theme === "dark-gold"
+                          ? "border-amber-500 bg-slate-900 text-white shadow-sm"
+                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
+                      }`}
+                    >
+                      <div className="h-4 w-4 rounded-full bg-gradient-to-br from-amber-400 to-amber-600" />
+                      <span className="text-xs font-bold">Preto Luxo Dourado</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setTheme("acrylic-blue")}
-                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border-2 text-left transition ${
-                      theme === "acrylic-blue"
-                        ? "border-cyan-600 bg-cyan-700 text-white shadow-sm"
-                        : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
-                    }`}
-                  >
-                    <div className="h-5 w-5 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 shadow-sm" />
-                    <div>
-                      <p className="text-xs font-bold leading-none">Azul & Branco Clean</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Acrílico cristal translúcido</p>
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setTheme("acrylic-blue")}
+                      className={`flex items-center gap-2 p-2 rounded-xl border-2 text-left transition ${
+                        theme === "acrylic-blue"
+                          ? "border-cyan-600 bg-cyan-700 text-white shadow-sm"
+                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
+                      }`}
+                    >
+                      <div className="h-4 w-4 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600" />
+                      <span className="text-xs font-bold">Azul & Branco Clean</span>
+                    </button>
+                  </div>
                 </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-slate-700">Qualidade de Impressão</Label>
+                  <div className="grid grid-cols-1 gap-2 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setQuality("4k-ultra")}
+                      className={`flex items-center gap-2 p-2 rounded-xl border-2 text-left transition ${
+                        quality === "4k-ultra"
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-950 font-bold shadow-sm"
+                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
+                      }`}
+                    >
+                      <Zap className="h-4 w-4 text-emerald-600" />
+                      <div>
+                        <p className="text-xs font-bold">4K Ultra HD</p>
+                        <p className="text-[10px] text-slate-500">600 a 1200 DPI</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setQuality("600dpi")}
+                      className={`flex items-center gap-2 p-2 rounded-xl border-2 text-left transition ${
+                        quality === "600dpi"
+                          ? "border-cyan-500 bg-cyan-50 text-cyan-950 font-bold shadow-sm"
+                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-800"
+                      }`}
+                    >
+                      <ShieldCheck className="h-4 w-4 text-cyan-600" />
+                      <div>
+                        <p className="text-xs font-bold">600 DPI Real</p>
+                        <p className="text-[10px] text-slate-500">Padrão Gráfica</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-2.5 border border-slate-200 text-[11px] text-slate-600 flex items-center justify-between">
+                <span>Resolução do arquivo gerado:</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {quality === "4k-ultra" ? formatDimensions.res4k : formatDimensions.res600}
+                </span>
               </div>
             </CardContent>
           </Card>
@@ -722,9 +955,6 @@ export function PlatePrintGenerator({
                 <Radio className="h-4 w-4 text-cyan-600" />
                 Vínculo com Empresa & Placa
               </CardTitle>
-              <CardDescription>
-                Selecione o estabelecimento cadastrado para carregar o link e identificador.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -777,9 +1007,6 @@ export function PlatePrintGenerator({
                 <p className="text-slate-500 font-medium">URL Dinâmica Gravada no QR / NFC:</p>
                 <p className="font-mono text-cyan-700 font-semibold break-all mt-0.5">
                   {targetUrl}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  * A placa física é impressa uma vez. O destino pode ser alterado a qualquer momento no painel.
                 </p>
               </div>
             </CardContent>
@@ -844,6 +1071,9 @@ export function PlatePrintGenerator({
             <div className="flex gap-2">
               <Badge variant="outline" className="bg-white">
                 {theme === "dark-gold" ? "🌙 Preto Luxo" : "☀️ Acrílico Clean"}
+              </Badge>
+              <Badge className="bg-emerald-600 text-white">
+                {quality === "4k-ultra" ? "4K Ultra" : "600 DPI"}
               </Badge>
             </div>
           </div>
@@ -1013,9 +1243,15 @@ export function PlatePrintGenerator({
             </div>
           </div>
 
-          <p className="mt-4 text-xs text-slate-400 text-center max-w-sm">
-            💡 Dica: Ao imprimir ou salvar em PDF, selecione <b>Escala: 100% (Padrão)</b> na caixa de diálogo do navegador para garantir as medidas exatas de {formatDimensions.label}.
-          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1 font-semibold text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" /> Qualidade Máxima para Gráfica
+            </span>
+            <span>•</span>
+            <span>Metadados Físicos de 600 DPI embutidos no PNG</span>
+            <span>•</span>
+            <span>Vetor SVG com medidas exatas em milímetros</span>
+          </div>
         </div>
       </div>
 
