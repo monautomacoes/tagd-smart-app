@@ -64,7 +64,6 @@ function createPhysChunk(dpi: number): Uint8Array {
 async function addDpiToPng(blob: Blob, dpi: number): Promise<Blob> {
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
-  // Verify PNG signature
   if (bytes[0] !== 0x89 || bytes[1] !== 0x50) return blob;
   const phys = createPhysChunk(dpi);
   const combined = new Uint8Array(bytes.length + phys.length);
@@ -72,6 +71,206 @@ async function addDpiToPng(blob: Blob, dpi: number): Promise<Blob> {
   combined.set(phys, 33);
   combined.set(bytes.subarray(33), 33 + phys.length);
   return new Blob([combined], { type: "image/png" });
+}
+
+// Builds the master senior-level vector SVG representation of the physical plate
+export function buildPlateSvg({
+  format,
+  theme,
+  customBusinessName,
+  customTitle,
+  customSubtitle,
+  customFooterTagline,
+  plateNumberLabel,
+  qrDataUrl,
+}: {
+  format: PrintFormat;
+  theme: PlateTheme;
+  customBusinessName: string;
+  customTitle: string;
+  customSubtitle: string;
+  customFooterTagline: string;
+  plateNumberLabel: string;
+  qrDataUrl: string;
+}): string {
+  const is10x10 = format === "10x10";
+  const isCard = format === "5.4x8.5";
+
+  // Physical Millimeters
+  const widthMm = isCard ? 54 : 100;
+  const heightMm = isCard ? 85 : is10x10 ? 100 : 150;
+
+  // ViewBox Grid (1000 width baseline)
+  const viewBoxWidth = 1000;
+  const viewBoxHeight = Math.round((heightMm / widthMm) * 1000); // 1000, 1574, or 1500
+
+  const isDark = theme === "dark-gold";
+  const displayName = customBusinessName || "DANI PONTELLO";
+
+  // Coordinate scales for taller formats (cards and vertical displays)
+  const isTall = !is10x10;
+  const dividerY = isTall ? Math.round(viewBoxHeight * 0.44) : 435;
+  const topCenterY = isTall ? Math.round(viewBoxHeight * 0.22) : 215;
+  const bottomCenterY = isTall ? Math.round(viewBoxHeight * 0.70) : 690;
+  const footerY = viewBoxHeight - Math.round(viewBoxHeight * 0.035);
+
+  const starCenters = [340, 420, 500, 580, 660];
+  const starY = isTall ? Math.round(dividerY * 0.16) : 65;
+  const titleY = starY + (isTall ? 75 : 65);
+  const subTitleY = titleY + 45;
+  const nameY = subTitleY + (isTall ? 80 : 70);
+  const underLineY = nameY + 16;
+  const taglineY = underLineY + (isTall ? 55 : 45);
+
+  const bottomContentTop = dividerY + (isTall ? 110 : 90);
+  const phoneCenterY = bottomContentTop + (isTall ? 170 : 145);
+  const qrCenterY = phoneCenterY;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${widthMm}mm" height="${heightMm}mm" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
+  <defs>
+    <!-- Gradiente Dourado Luxo para Tipografia -->
+    <linearGradient id="goldTextGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fffbeb" />
+      <stop offset="20%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="85%" stop-color="#d97706" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+
+    <!-- Gradiente Dourado para Estrelas -->
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+
+    <!-- Fita Colorida Oficial Google -->
+    <linearGradient id="googleRibbon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#EA4335" />
+      <stop offset="25%" stop-color="#EA4335" />
+      <stop offset="35%" stop-color="#FBBC05" />
+      <stop offset="60%" stop-color="#34A853" />
+      <stop offset="75%" stop-color="#4285F4" />
+      <stop offset="100%" stop-color="#4285F4" />
+    </linearGradient>
+
+    <!-- Sombras Realistas -->
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.25"/>
+    </filter>
+    <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#f59e0b" flood-opacity="0.45"/>
+    </filter>
+    <filter id="badgeShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-opacity="0.28"/>
+    </filter>
+
+    <!-- Símbolo Estrela Vetorial Perfeita -->
+    <g id="starVector">
+      <polygon points="0,-20 6,-6 20,-6 9,3 13,17 0,8 -13,17 -9,3 -20,-6 -6,-6" fill="url(#starGrad)" stroke="#d97706" stroke-width="1.2" filter="url(#goldGlow)" />
+    </g>
+
+    <!-- Símbolo Google G Oficial -->
+    <g id="googleLogoG">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </g>
+  </defs>
+
+  <!-- Fundo Total com Cantos Arredondados Físicos -->
+  <rect x="0" y="0" width="${viewBoxWidth}" height="${viewBoxHeight}" rx="${isCard ? 36 : 46}" fill="${isDark ? "#060709" : "#0284c7"}" />
+
+  <!-- Metade Inferior em Branco Puro -->
+  <rect x="0" y="${dividerY}" width="${viewBoxWidth}" height="${viewBoxHeight - dividerY}" fill="#ffffff" />
+
+  <!-- SEÇÃO SUPERIOR: TÍTULOS E ESTRELAS -->
+  <!-- 5 Estrelas Douradas -->
+  <g>
+    ${starCenters.map((x) => `<use href="#starVector" x="${x}" y="${starY}" />`).join("\n    ")}
+  </g>
+
+  <!-- Linha 1: "NÓS ADORARÍAMOS A SUA" -->
+  <text x="500" y="${titleY}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="22" fill="#ffffff" letter-spacing="3">${customTitle}</text>
+
+  <!-- Linha 2: "AVALIAÇÃO NO GOOGLE" -->
+  <text x="500" y="${subTitleY}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="30" fill="#ffffff" letter-spacing="1.5">${customSubtitle}</text>
+
+  <!-- Nome da Empresa em Ouro com Sombra Reluzente -->
+  <text x="500" y="${nameY}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="52" fill="url(#goldTextGrad)" letter-spacing="2" filter="url(#goldGlow)">${displayName}</text>
+
+  <!-- Linha Sublinhada Dourada -->
+  <line x1="200" y1="${underLineY}" x2="800" y2="${underLineY}" stroke="url(#goldTextGrad)" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Frase de Apoio -->
+  <text x="500" y="${taglineY}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="500" font-size="16" fill="#e2e8f0">${customFooterTagline}</text>
+
+  <!-- FITA COLORIDA GOOGLE COM TRANSIÇÃO CURVADA -->
+  <path d="M 0,${dividerY - 8} Q 500,${dividerY + 8} 1000,${dividerY - 8} L 1000,${dividerY + 12} Q 500,${dividerY + 28} 0,${dividerY + 12} Z" fill="url(#googleRibbon)" />
+
+  <!-- EMBLEMA CENTRAL CIRCULAR GOOGLE "G" -->
+  <circle cx="500" cy="${dividerY + 4}" r="64" fill="#ffffff" filter="url(#badgeShadow)" />
+  <circle cx="500" cy="${dividerY + 4}" r="63" fill="none" stroke="#f1f5f9" stroke-width="2" />
+  <use href="#googleLogoG" x="456" y="${dividerY - 40}" width="88" height="88" transform="scale(1)" />
+
+  <!-- SEÇÃO INFERIOR: CELULAR NFC + DIVISOR OU + QR CODE -->
+  <!-- COLUNA ESQUERDA: SMARTPHONE NFC ILUSTRADO -->
+  <!-- Título Esquerda -->
+  <text x="260" y="${bottomContentTop - 15}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="800" font-size="22" fill="#0f172a">Aproxime seu celular</text>
+
+  <!-- Corpo do Smartphone com Cantos Arredondados e Detalhes de Design -->
+  <rect x="195" y="${phoneCenterY - 120}" width="130" height="240" rx="26" fill="#ffffff" stroke="#0f172a" stroke-width="5" />
+  <!-- Entalhe / Speaker Superior -->
+  <line x1="240" y1="${phoneCenterY - 105}" x2="280" y2="${phoneCenterY - 105}" stroke="#0f172a" stroke-width="3" stroke-linecap="round" />
+  <!-- Barra Home Inferior -->
+  <line x1="240" y1="${phoneCenterY + 105}" x2="280" y2="${phoneCenterY + 105}" stroke="#0f172a" stroke-width="3" stroke-linecap="round" />
+
+  <!-- Cartãozinho NFC Central dentro da tela -->
+  <rect x="220" y="${phoneCenterY - 26}" width="80" height="52" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.8" />
+  <text x="260" y="${phoneCenterY + 8}" text-anchor="middle" font-family="monospace, -apple-system, sans-serif" font-weight="900" font-size="22" fill="#0f172a">NFC</text>
+
+  <!-- Ondas de Rádio Azuis Irradiando do Smartphone -->
+  <path d="M 235,${phoneCenterY - 20} A 35 35 0 0 1 285,${phoneCenterY - 20}" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round" />
+  <path d="M 218,${phoneCenterY - 38} A 60 60 0 0 1 302,${phoneCenterY - 38}" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round" />
+  <path d="M 200,${phoneCenterY - 56} A 85 85 0 0 1 320,${phoneCenterY - 56}" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round" />
+
+  <!-- Subtítulo Celular -->
+  <text x="260" y="${phoneCenterY + 155}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="12" fill="#64748b">Sem aplicativo • Direto no celular</text>
+
+  <!-- DIVISOR CENTRAL: "OU" -->
+  <circle cx="500" cy="${phoneCenterY}" r="28" fill="#f8fafc" />
+  <text x="500" y="${phoneCenterY + 10}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="900" font-size="28" fill="#0f172a">OU</text>
+
+  <!-- COLUNA DIREITA: QR CODE COM MOLDURA DE CANTOS -->
+  <!-- 4 Cantoneiras de Design ao redor do QR Code -->
+  <g stroke="#0f172a" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Canto Superior Esquerdo -->
+    <path d="M 610,${qrCenterY - 70} L 610,${qrCenterY - 110} A 10 10 0 0 1 620,${qrCenterY - 120} L 660,${qrCenterY - 120}" />
+    <!-- Canto Superior Direito -->
+    <path d="M 810,${qrCenterY - 120} L 850,${qrCenterY - 120} A 10 10 0 0 1 860,${qrCenterY - 110} L 860,${qrCenterY - 70}" />
+    <!-- Canto Inferior Esquerdo -->
+    <path d="M 610,${qrCenterY + 70} L 610,${qrCenterY + 110} A 10 10 0 0 0 620,${qrCenterY + 120} L 660,${qrCenterY + 120}" />
+    <!-- Canto Inferior Direito -->
+    <path d="M 810,${qrCenterY + 120} L 850,${qrCenterY + 120} A 10 10 0 0 0 860,${qrCenterY + 110} L 860,${qrCenterY + 70}" />
+  </g>
+
+  <!-- Imagem do QR Code Dinâmico em Ultra Resolução -->
+  ${qrDataUrl ? `<image href="${qrDataUrl}" x="625" y="${qrCenterY - 105}" width="220" height="220" />` : ""}
+
+  <!-- Badge Google G no Centro do QR Code -->
+  <circle cx="735" cy="${qrCenterY + 5}" r="25" fill="#ffffff" filter="url(#softShadow)" />
+  <circle cx="735" cy="${qrCenterY + 5}" r="24" fill="none" stroke="#f1f5f9" stroke-width="1.5" />
+  <use href="#googleLogoG" x="718" y="${qrCenterY - 12}" width="34" height="34" />
+
+  <!-- Textos QR Code -->
+  <text x="735" y="${qrCenterY + 150}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="800" font-size="22" fill="#0f172a">Aponte a câmera</text>
+  <text x="735" y="${qrCenterY + 176}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="13" fill="#0284c7">⚡ Avalie em 3 segundos</text>
+
+  <!-- RODAPÉ TÉCNICO OFICIAL COM ESPAÇAMENTO RESPIRADO -->
+  <text x="500" y="${footerY}" text-anchor="middle" font-family="monospace, -apple-system, sans-serif" font-weight="600" font-size="10" fill="#94a3b8" letter-spacing="2.5">CHIP NFC NTAG215 • ID: ${plateNumberLabel} • ALF AUTOMAÇÃO</text>
+</svg>`;
 }
 
 interface PlatePrintGeneratorProps {
@@ -253,10 +452,34 @@ export function PlatePrintGenerator({
     }
   }, [format]);
 
-  // Print function
+  const plateNumberLabel =
+    currentTag?.plateNumber || currentTag?.code || customBusinessName || "DANIPONTELLO";
+
+  // Master SVG markup
+  const masterSvgString = useMemo(() => {
+    return buildPlateSvg({
+      format,
+      theme,
+      customBusinessName,
+      customTitle,
+      customSubtitle,
+      customFooterTagline,
+      plateNumberLabel,
+      qrDataUrl,
+    });
+  }, [
+    format,
+    theme,
+    customBusinessName,
+    customTitle,
+    customSubtitle,
+    customFooterTagline,
+    plateNumberLabel,
+    qrDataUrl,
+  ]);
+
+  // Print function using the master vector SVG
   const handlePrint = () => {
-    const plateId = currentTag?.plateNumber || currentTag?.code || "001";
-    const name = customBusinessName || currentBusiness?.name || "PLACA";
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       toast.error("Por favor, permita pop-ups para abrir a folha de impressão.");
@@ -274,7 +497,7 @@ export function PlatePrintGenerator({
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8" />
-          <title>Impressão Placa - ${name} - ${plateId}</title>
+          <title>Impressão Placa - ${plateNumberLabel}</title>
           <style>
             @page {
               size: auto;
@@ -318,16 +541,15 @@ export function PlatePrintGenerator({
             .plate-container {
               width: ${widthCm};
               height: ${heightCm};
-              position: relative;
-              background: ${theme === "dark-gold" ? "#000000" : "#0284c7"};
-              border-radius: ${isCard ? "3.5mm" : "6mm"};
-              overflow: hidden;
               box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-              display: flex;
-              flex-direction: column;
               page-break-inside: avoid;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
+            }
+            .plate-container svg {
+              width: 100%;
+              height: 100%;
+              display: block;
             }
             @media print {
               body {
@@ -352,7 +574,7 @@ export function PlatePrintGenerator({
           </div>
 
           <div class="plate-container">
-            ${document.getElementById("plate-print-target")?.innerHTML || ""}
+            ${masterSvgString}
           </div>
 
           <script>
@@ -368,7 +590,7 @@ export function PlatePrintGenerator({
     printWindow.document.close();
   };
 
-  // Ultra HD 4K & 600+ DPI PNG Download
+  // Ultra HD 4K & 600+ DPI PNG Download from Master Vector SVG
   const handleDownloadPng = async () => {
     try {
       setIsGeneratingPng(true);
@@ -376,224 +598,42 @@ export function PlatePrintGenerator({
       const isCard = format === "5.4x8.5";
 
       // 4K Ultra HD Dimensions (up to 4000px, >1000 DPI)
-      let canvasWidth = 4000;
-      let canvasHeight = 4000;
+      let targetWidth = 4000;
+      let targetHeight = 4000;
 
       if (isCard) {
-        canvasWidth = quality === "4k-ultra" ? 2550 : 1276;
-        canvasHeight = quality === "4k-ultra" ? 4016 : 2008;
+        targetWidth = quality === "4k-ultra" ? 2550 : 1276;
+        targetHeight = quality === "4k-ultra" ? 4016 : 2008;
       } else if (is10x10) {
-        canvasWidth = quality === "4k-ultra" ? 4000 : 2362;
-        canvasHeight = quality === "4k-ultra" ? 4000 : 2362;
+        targetWidth = quality === "4k-ultra" ? 4000 : 2362;
+        targetHeight = quality === "4k-ultra" ? 4000 : 2362;
       } else {
         // 10x15
-        canvasWidth = quality === "4k-ultra" ? 3600 : 2362;
-        canvasHeight = quality === "4k-ultra" ? 5400 : 3543;
+        targetWidth = quality === "4k-ultra" ? 3600 : 2362;
+        targetHeight = quality === "4k-ultra" ? 5400 : 3543;
       }
 
+      // Convert SVG to Image and draw to 4K Canvas
+      const svgBlob = new Blob([masterSvgString], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = (e) => reject(e);
+        img.src = svgUrl;
+      });
+
       const canvas = document.createElement("canvas");
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const ctx = canvas.getContext("2d", { alpha: false });
       if (!ctx) throw new Error("Não foi possível inicializar o Canvas.");
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-
-      // Background Top
-      const isDark = theme === "dark-gold";
-      ctx.fillStyle = isDark ? "#060709" : "#0284c7";
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      // Bottom Half (White)
-      const dividerY = canvasHeight * (isCard ? 0.46 : 0.44);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, dividerY, canvasWidth, canvasHeight - dividerY);
-
-      // Google Color Gradient Ribbon
-      const ribbonHeight = canvasHeight * 0.016;
-      const ribbonY = dividerY - ribbonHeight / 2;
-      const ribbonGrad = ctx.createLinearGradient(0, 0, canvasWidth, 0);
-      ribbonGrad.addColorStop(0.0, "#EA4335");
-      ribbonGrad.addColorStop(0.3, "#FBBC05");
-      ribbonGrad.addColorStop(0.65, "#34A853");
-      ribbonGrad.addColorStop(1.0, "#4285F4");
-      ctx.fillStyle = ribbonGrad;
-      ctx.fillRect(0, ribbonY, canvasWidth, ribbonHeight);
-
-      // Draw Top Stars (5 Stars)
-      const starCount = 5;
-      const starSize = canvasWidth * 0.055;
-      const starsTotalWidth = starCount * starSize * 1.5;
-      const starStartX = (canvasWidth - starsTotalWidth) / 2 + starSize * 0.75;
-      const starY = canvasHeight * 0.08;
-
-      ctx.fillStyle = "#fbbf24";
-      ctx.shadowColor = "rgba(251, 191, 36, 0.6)";
-      ctx.shadowBlur = Math.round(canvasWidth * 0.01);
-      for (let i = 0; i < starCount; i++) {
-        drawStar(ctx, starStartX + i * (starSize * 1.45), starY, 5, starSize, starSize / 2);
-      }
-      ctx.shadowBlur = 0;
-
-      // Draw Header Text
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `bold ${Math.round(canvasWidth * 0.038)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText(customTitle, canvasWidth / 2, starY + canvasHeight * 0.075);
-
-      ctx.font = `900 ${Math.round(canvasWidth * 0.05)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText(customSubtitle, canvasWidth / 2, starY + canvasHeight * 0.135);
-
-      // Draw Business Name in Gold
-      const goldY = starY + canvasHeight * 0.21;
-      const goldGrad = ctx.createLinearGradient(0, goldY - 30, canvasWidth, goldY + 10);
-      goldGrad.addColorStop(0.0, "#fef08a");
-      goldGrad.addColorStop(0.5, "#f59e0b");
-      goldGrad.addColorStop(1.0, "#d97706");
-
-      ctx.fillStyle = goldGrad;
-      ctx.shadowColor = "rgba(245, 158, 11, 0.4)";
-      ctx.shadowBlur = Math.round(canvasWidth * 0.015);
-      ctx.font = `900 ${Math.round(canvasWidth * 0.068)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      const displayName = customBusinessName || currentBusiness?.name?.toUpperCase() || "DANI PONTELLO";
-      ctx.fillText(displayName, canvasWidth / 2, goldY);
-      ctx.shadowBlur = 0;
-
-      // Golden underline
-      const nameWidth = Math.min(ctx.measureText(displayName).width + canvasWidth * 0.05, canvasWidth * 0.85);
-      ctx.strokeStyle = goldGrad;
-      ctx.lineWidth = Math.max(4, Math.round(canvasWidth * 0.003));
-      ctx.beginPath();
-      ctx.moveTo((canvasWidth - nameWidth) / 2, goldY + canvasHeight * 0.015);
-      ctx.lineTo((canvasWidth + nameWidth) / 2, goldY + canvasHeight * 0.015);
-      ctx.stroke();
-
-      // Top Tagline
-      ctx.fillStyle = isDark ? "#e2e8f0" : "#f8fafc";
-      ctx.font = `500 ${Math.round(canvasWidth * 0.026)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText(customFooterTagline, canvasWidth / 2, goldY + canvasHeight * 0.065);
-
-      // Draw Center Google "G" Badge
-      const badgeRadius = canvasWidth * 0.085;
-      const badgeY = dividerY;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(canvasWidth / 2, badgeY, badgeRadius, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-      ctx.shadowBlur = Math.round(canvasWidth * 0.015);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.restore();
-
-      // Load and draw Google G SVG into the badge
-      const googleSvgUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path fill="%23EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="%234285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="%23FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="%2334A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>`;
-      const googleImg = new Image();
-      await new Promise<void>((resolve) => {
-        googleImg.onload = () => {
-          const gSize = badgeRadius * 1.25;
-          ctx.drawImage(googleImg, canvasWidth / 2 - gSize / 2, badgeY - gSize / 2, gSize, gSize);
-          resolve();
-        };
-        googleImg.src = googleSvgUrl;
-      });
-
-      // Bottom Section:
-      // Left: NFC Phone Illustration + Text
-      const leftColCenterX = canvasWidth * 0.28;
-      const rightColCenterX = canvasWidth * 0.72;
-      const bottomContentTop = dividerY + canvasHeight * 0.09;
-
-      // Left Column Text
-      ctx.fillStyle = "#0f172a";
-      ctx.font = `bold ${Math.round(canvasWidth * 0.038)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText("Aproxime seu celular", leftColCenterX, bottomContentTop);
-
-      // Draw Smartphone vector
-      const phoneW = canvasWidth * 0.2;
-      const phoneH = phoneW * 1.8;
-      const phoneX = leftColCenterX - phoneW / 2;
-      const phoneY = bottomContentTop + canvasHeight * 0.03;
-
-      ctx.strokeStyle = "#1e293b";
-      ctx.lineWidth = Math.max(6, Math.round(canvasWidth * 0.012));
-      ctx.lineJoin = "round";
-      ctx.strokeRect(phoneX, phoneY, phoneW, phoneH);
-
-      // NFC icon inside phone
-      ctx.fillStyle = "#0f172a";
-      ctx.font = `bold ${Math.round(phoneW * 0.26)}px monospace`;
-      ctx.fillText("NFC", leftColCenterX, phoneY + phoneH * 0.52);
-
-      // Radio waves radiating from phone
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = Math.max(4, Math.round(canvasWidth * 0.008));
-      for (let r = 1; r <= 3; r++) {
-        ctx.beginPath();
-        ctx.arc(phoneX + phoneW * 0.85, phoneY + phoneH * 0.35, phoneW * (0.25 * r), -Math.PI * 0.8, -Math.PI * 0.1);
-        ctx.stroke();
-      }
-
-      // Left Subtext
-      ctx.fillStyle = "#64748b";
-      ctx.font = `600 ${Math.round(canvasWidth * 0.024)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText("Sem aplicativo • Direto no celular", leftColCenterX, phoneY + phoneH + canvasHeight * 0.045);
-
-      // Center Divider: "OU"
-      ctx.fillStyle = "#0f172a";
-      ctx.font = `900 ${Math.round(canvasWidth * 0.045)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText("OU", canvasWidth / 2, phoneY + phoneH * 0.5);
-
-      // Right Column: QR Code + Text
-      const qrSize = canvasWidth * 0.32;
-      const qrX = rightColCenterX - qrSize / 2;
-      const qrY = phoneY + (phoneH - qrSize) / 2 - canvasHeight * 0.02;
-
-      // Draw QR image
-      if (qrDataUrl) {
-        const qrImg = new Image();
-        await new Promise<void>((resolve) => {
-          qrImg.onload = () => {
-            // Crisp rendering
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(qrX - 10, qrY - 10, qrSize + 20, qrSize + 20);
-            ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-
-            // Center Google G badge over QR Code
-            const miniGSize = qrSize * 0.22;
-            const miniGX = rightColCenterX - miniGSize / 2;
-            const miniGY = qrY + qrSize / 2 - miniGSize / 2;
-            ctx.beginPath();
-            ctx.arc(rightColCenterX, qrY + qrSize / 2, miniGSize * 0.65, 0, Math.PI * 2);
-            ctx.fillStyle = "#ffffff";
-            ctx.fill();
-            ctx.drawImage(googleImg, miniGX, miniGY, miniGSize, miniGSize);
-
-            resolve();
-          };
-          qrImg.src = qrDataUrl;
-        });
-      }
-
-      // Right Subtexts
-      ctx.fillStyle = "#0f172a";
-      ctx.font = `bold ${Math.round(canvasWidth * 0.038)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText("Aponte a câmera", rightColCenterX, phoneY + phoneH + canvasHeight * 0.015);
-
-      ctx.fillStyle = "#0284c7";
-      ctx.font = `600 ${Math.round(canvasWidth * 0.024)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      ctx.fillText("⚡ Avalie em 3 segundos", rightColCenterX, phoneY + phoneH + canvasHeight * 0.045);
-
-      // Absolute Footer Credit
-      const plateNumberLabel = currentTag?.plateNumber || currentTag?.code || displayName;
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = `500 ${Math.round(canvasWidth * 0.019)}px monospace`;
-      ctx.fillText(
-        `CHIP NFC NTAG215 • ID: ${plateNumberLabel} • ALF AUTOMAÇÃO`,
-        canvasWidth / 2,
-        canvasHeight - canvasHeight * 0.025
-      );
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      URL.revokeObjectURL(svgUrl);
 
       // Convert Canvas to Blob and inject 600 DPI / 1000 DPI pHYs Chunk
       canvas.toBlob(
@@ -602,21 +642,21 @@ export function PlatePrintGenerator({
           const targetDpi = quality === "4k-ultra" ? 1000 : 600;
           const finalBlob = await addDpiToPng(rawBlob, targetDpi);
           const link = document.createElement("a");
-          link.download = `PLACA-${displayName}-${plateNumberLabel}-${format}-${quality}.png`;
+          link.download = `PLACA-${customBusinessName || "ARTE"}-${plateNumberLabel}-${format}-${quality}.png`;
           link.href = URL.createObjectURL(finalBlob);
           document.body.appendChild(link);
           link.click();
           link.remove();
           URL.revokeObjectURL(link.href);
           toast.success(
-            `Imagem Ultra HD 4K (${targetDpi} DPI com metadados físicos) baixada com sucesso!`
+            `Imagem Ultra HD 4K (${targetDpi} DPI com metadados físicos) baixada com proporções perfeitas!`
           );
         },
         "image/png"
       );
     } catch (err: any) {
       console.error(err);
-      toast.error(`Erro ao gerar PNG: ${err?.message || "falha no canvas"}`);
+      toast.error(`Erro ao gerar PNG: ${err?.message || "falha na renderização"}`);
     } finally {
       setIsGeneratingPng(false);
     }
@@ -626,96 +666,9 @@ export function PlatePrintGenerator({
   const handleDownloadSvg = () => {
     try {
       setIsGeneratingSvg(true);
-      const isCard = format === "5.4x8.5";
-      const is10x10 = format === "10x10";
-      const widthMm = isCard ? 54 : 100;
-      const heightMm = isCard ? 85 : is10x10 ? 100 : 150;
-      const viewBoxWidth = 1000;
-      const viewBoxHeight = Math.round((heightMm / widthMm) * 1000);
-      const displayName = customBusinessName || currentBusiness?.name?.toUpperCase() || "DANI PONTELLO";
-      const plateNumberLabel = currentTag?.plateNumber || currentTag?.code || displayName;
-
-      const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${widthMm}mm" height="${heightMm}mm" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}">
-  <defs>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#fef08a" />
-      <stop offset="50%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#d97706" />
-    </linearGradient>
-    <linearGradient id="googleRibbon" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#EA4335" />
-      <stop offset="30%" stop-color="#FBBC05" />
-      <stop offset="65%" stop-color="#34A853" />
-      <stop offset="100%" stop-color="#4285F4" />
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
-    </filter>
-  </defs>
-
-  <!-- Fundo Superior -->
-  <rect x="0" y="0" width="${viewBoxWidth}" height="${viewBoxHeight}" fill="${theme === "dark-gold" ? "#060709" : "#0284c7"}" />
-
-  <!-- Fundo Inferior Branco -->
-  <rect x="0" y="${Math.round(viewBoxHeight * 0.44)}" width="${viewBoxWidth}" height="${Math.round(viewBoxHeight * 0.56)}" fill="#ffffff" />
-
-  <!-- Fita Colorida Google -->
-  <rect x="0" y="${Math.round(viewBoxHeight * 0.435)}" width="${viewBoxWidth}" height="${Math.round(viewBoxHeight * 0.016)}" fill="url(#googleRibbon)" />
-
-  <!-- 5 Estrelas Douradas -->
-  <g fill="#fbbf24" stroke="#d97706" stroke-width="2">
-    ${[...Array(5)]
-      .map(
-        (_, i) =>
-          `<polygon points="10,1 4,19.8 19,7.8 1,7.8 16,19.8" transform="translate(${350 + i * 65}, ${Math.round(viewBoxHeight * 0.065)}) scale(2.8)" />`
-      )
-      .join("")}
-  </g>
-
-  <!-- Textos do Topo -->
-  <text x="500" y="${Math.round(viewBoxHeight * 0.16)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#ffffff" letter-spacing="3">${customTitle}</text>
-  <text x="500" y="${Math.round(viewBoxHeight * 0.22)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="46" fill="#ffffff" letter-spacing="2">${customSubtitle}</text>
-
-  <!-- Nome da Empresa em Ouro -->
-  <text x="500" y="${Math.round(viewBoxHeight * 0.31)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="62" fill="url(#goldGrad)" letter-spacing="2" filter="url(#shadow)">${displayName}</text>
-  <line x1="200" y1="${Math.round(viewBoxHeight * 0.33)}" x2="800" y2="${Math.round(viewBoxHeight * 0.33)}" stroke="url(#goldGrad)" stroke-width="4" />
-
-  <!-- Subtítulo -->
-  <text x="500" y="${Math.round(viewBoxHeight * 0.38)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="500" font-size="24" fill="#e2e8f0">${customFooterTagline}</text>
-
-  <!-- Badge Google Central -->
-  <circle cx="500" cy="${Math.round(viewBoxHeight * 0.443)}" r="75" fill="#ffffff" filter="url(#shadow)" />
-  <g transform="translate(450, ${Math.round(viewBoxHeight * 0.443 - 50)}) scale(2.1)">
-    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-  </g>
-
-  <!-- Coluna Esquerda: NFC -->
-  <text x="270" y="${Math.round(viewBoxHeight * 0.55)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#0f172a">Aproxime seu celular</text>
-  <rect x="200" y="${Math.round(viewBoxHeight * 0.58)}" width="140" height="240" rx="20" fill="#f8fafc" stroke="#1e293b" stroke-width="8"/>
-  <rect x="235" y="${Math.round(viewBoxHeight * 0.68)}" width="70" height="40" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="270" y="${Math.round(viewBoxHeight * 0.71)}" text-anchor="middle" font-family="monospace" font-weight="900" font-size="22" fill="#0f172a">NFC</text>
-  <text x="270" y="${Math.round(viewBoxHeight * 0.88)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="600" font-size="20" fill="#64748b">Sem aplicativo • Direto no celular</text>
-
-  <!-- Centro: OU -->
-  <circle cx="500" cy="${Math.round(viewBoxHeight * 0.70)}" r="32" fill="#f1f5f9" />
-  <text x="500" y="${Math.round(viewBoxHeight * 0.71)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="900" font-size="30" fill="#0f172a">OU</text>
-
-  <!-- Coluna Direita: QR Code -->
-  ${qrDataUrl ? `<image href="${qrDataUrl}" x="575" y="${Math.round(viewBoxHeight * 0.57)}" width="270" height="270" />` : ""}
-  <text x="710" y="${Math.round(viewBoxHeight * 0.88)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="34" fill="#0f172a">Aponte a câmera</text>
-  <text x="710" y="${Math.round(viewBoxHeight * 0.92)}" text-anchor="middle" font-family="Arial, sans-serif" font-weight="bold" font-size="22" fill="#0284c7">⚡ Avalie em 3 segundos</text>
-
-  <!-- Rodapé Técnico -->
-  <text x="500" y="${Math.round(viewBoxHeight * 0.975)}" text-anchor="middle" font-family="monospace" font-size="16" fill="#94a3b8" letter-spacing="3">CHIP NFC NTAG215 • ID: ${plateNumberLabel} • ALF AUTOMAÇÃO</text>
-</svg>`;
-
-      const blob = new Blob([svgContent], { type: "image/svg+xml;charset=utf-8" });
+      const blob = new Blob([masterSvgString], { type: "image/svg+xml;charset=utf-8" });
       const link = document.createElement("a");
-      link.download = `PLACA-${displayName}-${plateNumberLabel}-${format}-VETOR.svg`;
+      link.download = `PLACA-${customBusinessName || "ARTE"}-${plateNumberLabel}-${format}-VETOR.svg`;
       link.href = URL.createObjectURL(blob);
       document.body.appendChild(link);
       link.click();
@@ -750,8 +703,8 @@ export function PlatePrintGenerator({
             Gerador de Placas & Cartões para Impressão
           </h2>
           <p className="mt-1 text-sm text-slate-300 max-w-2xl">
-            Exporte arquivos em <b>4K Ultra HD (600 a 1200 DPI)</b> e <b>Vetor SVG infinito</b> prontos
-            para envio à gráfica rápida, fabricantes de acrílico ou corte a laser.
+            Exporte arquivos em <b>4K Ultra HD (600 a 1200 DPI)</b> e <b>Vetor SVG infinito</b> com layout
+            balanceado, proporções exatas e acabamento profissional para gráficas.
           </p>
         </div>
 
@@ -1062,11 +1015,11 @@ export function PlatePrintGenerator({
           </Card>
         </div>
 
-        {/* Live Visual Preview Column */}
+        {/* Live Visual Preview Column (Renders the Master Vector SVG directly!) */}
         <div className="flex flex-col items-center">
           <div className="w-full flex items-center justify-between mb-3 px-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Pré-Visualização em Tempo Real ({formatDimensions.label})
+              Pré-Visualização Vetorial Idêntica ao Download ({formatDimensions.label})
             </span>
             <div className="flex gap-2">
               <Badge variant="outline" className="bg-white">
@@ -1078,179 +1031,23 @@ export function PlatePrintGenerator({
             </div>
           </div>
 
-          {/* Interactive Plate Card Canvas Mockup */}
+          {/* Master Vector SVG Preview Box */}
           <div
-            id="plate-print-target"
-            className={`relative w-full max-w-[420px] ${formatDimensions.aspectRatio} overflow-hidden rounded-[26px] shadow-2xl transition-all duration-300 flex flex-col justify-between select-none ${
-              theme === "dark-gold" ? "bg-[#060709] text-white" : "bg-sky-600 text-white"
-            }`}
+            className="w-full max-w-[420px] rounded-[26px] overflow-hidden shadow-2xl border border-slate-200 transition-all select-none"
             style={{
               boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.4)",
             }}
-          >
-            {/* Top Half: Dark / Brand Colors */}
-            <div className="relative pt-6 px-6 pb-8 text-center flex flex-col items-center justify-center flex-1">
-              {/* 5 Stars */}
-              <div className="flex items-center justify-center gap-1.5 mb-2.5">
-                {[...Array(5)].map((_, i) => (
-                  <svg
-                    key={i}
-                    className="w-5 h-5 text-amber-400 drop-shadow-[0_2px_8px_rgba(251,191,36,0.6)]"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-
-              {/* Title & Subtitle */}
-              <p className="text-[11px] font-bold tracking-[0.15em] uppercase text-white/90">
-                {customTitle}
-              </p>
-              <h3 className="text-sm md:text-base font-extrabold tracking-wider uppercase text-white mt-0.5">
-                {customSubtitle}
-              </h3>
-
-              {/* Business Name in Golden Glow */}
-              <div className="my-2 text-center w-full px-2">
-                <h2 className="text-xl md:text-2xl font-black uppercase tracking-wider bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500 bg-clip-text text-transparent drop-shadow-[0_2px_12px_rgba(245,158,11,0.5)]">
-                  {customBusinessName || currentBusiness?.name || "DANI PONTELLO"}
-                </h2>
-                <div className="mx-auto mt-1 h-[2px] w-3/4 bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
-              </div>
-
-              {/* Sub-tagline */}
-              <p className="text-[10px] md:text-[11px] text-slate-200 font-medium max-w-[280px] leading-tight">
-                {customFooterTagline}
-              </p>
-            </div>
-
-            {/* Google Colors Ribbon & Central "G" Badge */}
-            <div className="relative w-full z-10">
-              <div className="h-1.5 w-full bg-gradient-to-r from-[#EA4335] via-[#FBBC05] via-[#34A853] to-[#4285F4]" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-full p-2 shadow-lg border border-slate-100 flex items-center justify-center">
-                <svg className="w-8 h-8" viewBox="0 0 48 48">
-                  <path
-                    fill="#EA4335"
-                    d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                  />
-                  <path
-                    fill="#4285F4"
-                    d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                  />
-                </svg>
-              </div>
-            </div>
-
-            {/* Bottom Half: White Background with NFC & QR Dual Columns */}
-            <div className="bg-white text-slate-900 pt-7 px-4 pb-4 flex flex-col justify-between flex-1">
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 my-auto">
-                {/* Left Column: NFC Smartphone */}
-                <div className="flex flex-col items-center text-center">
-                  <p className="text-[11px] font-bold text-slate-900 tracking-tight">
-                    Aproxime seu celular
-                  </p>
-
-                  <div className="relative my-2 w-16 h-24 border-2 border-slate-800 rounded-xl flex flex-col items-center justify-center bg-slate-50 shadow-inner">
-                    {/* NFC wave overlay */}
-                    <div className="absolute -top-1 -right-2 text-blue-600">
-                      <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M12 2a10 10 0 0 1 10 10" />
-                        <path d="M12 6a6 6 0 0 1 6 6" />
-                      </svg>
-                    </div>
-                    <span className="font-mono text-xs font-black text-slate-800 border border-slate-300 rounded px-1 py-0.5 bg-white shadow-xs">
-                      NFC
-                    </span>
-                  </div>
-
-                  <p className="text-[8px] font-semibold text-slate-500 leading-tight">
-                    Sem aplicativo • Direto no celular
-                  </p>
-                </div>
-
-                {/* Center "OU" */}
-                <div className="flex flex-col items-center justify-center px-1">
-                  <span className="text-xs font-black text-slate-900 bg-slate-100 rounded-full px-2 py-1">
-                    OU
-                  </span>
-                </div>
-
-                {/* Right Column: QR Code */}
-                <div className="flex flex-col items-center text-center">
-                  <div className="relative p-1 rounded-xl bg-white shadow-sm border border-slate-200">
-                    {qrDataUrl ? (
-                      <div className="relative">
-                        <img
-                          src={qrDataUrl}
-                          alt="QR Code Dinâmico"
-                          className="w-24 h-24 object-contain"
-                        />
-                        {/* Mini Google G logo badge over center of QR */}
-                        <div className="absolute inset-0 m-auto w-6 h-6 rounded-full bg-white p-0.5 shadow-sm border border-slate-100 flex items-center justify-center">
-                          <svg className="w-4 h-4" viewBox="0 0 48 48">
-                            <path
-                              fill="#EA4335"
-                              d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-                            />
-                            <path
-                              fill="#4285F4"
-                              d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-                            />
-                            <path
-                              fill="#FBBC05"
-                              d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-                            />
-                            <path
-                              fill="#34A853"
-                              d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-                            />
-                          </svg>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-24 h-24 bg-slate-100 flex items-center justify-center">
-                        <QrCode className="w-8 h-8 text-slate-400 animate-pulse" />
-                      </div>
-                    )}
-                  </div>
-
-                  <p className="mt-1 text-[11px] font-bold text-slate-900 leading-tight">
-                    Aponte a câmera
-                  </p>
-                  <p className="text-[8px] font-semibold text-cyan-700 leading-tight">
-                    ⚡ Avalie em 3 segundos
-                  </p>
-                </div>
-              </div>
-
-              {/* Absolute Technical Micro Footer */}
-              <div className="pt-2 border-t border-slate-100 text-center">
-                <p className="font-mono text-[7px] text-slate-400 uppercase tracking-widest">
-                  CHIP NFC NTAG215 • ID:{" "}
-                  {currentTag?.plateNumber || currentTag?.code || customBusinessName} • ALF AUTOMAÇÃO
-                </p>
-              </div>
-            </div>
-          </div>
+            dangerouslySetInnerHTML={{ __html: masterSvgString }}
+          />
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500">
             <span className="flex items-center gap-1 font-semibold text-emerald-700">
-              <CheckCircle2 className="h-4 w-4" /> Qualidade Máxima para Gráfica
+              <CheckCircle2 className="h-4 w-4" /> 100% Fiel à Arte Original
             </span>
             <span>•</span>
-            <span>Metadados Físicos de 600 DPI embutidos no PNG</span>
+            <span>Vetor SVG e PNG 4K gerados da mesma matriz</span>
             <span>•</span>
-            <span>Vetor SVG com medidas exatas em milímetros</span>
+            <span>Cantoneiras de design no QR e Smartphone detalhado</span>
           </div>
         </div>
       </div>
@@ -1376,36 +1173,4 @@ export function PlatePrintGenerator({
       </Dialog>
     </div>
   );
-}
-
-// Helper function to draw star polygons on canvas
-function drawStar(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  spikes: number,
-  outerRadius: number,
-  innerRadius: number
-) {
-  let rot = (Math.PI / 2) * 3;
-  let x = cx;
-  let y = cy;
-  const step = Math.PI / spikes;
-
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - outerRadius);
-  for (let i = 0; i < spikes; i++) {
-    x = cx + Math.cos(rot) * outerRadius;
-    y = cy + Math.sin(rot) * outerRadius;
-    ctx.lineTo(x, y);
-    rot += step;
-
-    x = cx + Math.cos(rot) * innerRadius;
-    y = cy + Math.sin(rot) * innerRadius;
-    ctx.lineTo(x, y);
-    rot += step;
-  }
-  ctx.lineTo(cx, cy - outerRadius);
-  ctx.closePath();
-  ctx.fill();
 }
