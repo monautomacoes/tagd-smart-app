@@ -11,7 +11,21 @@ let _tablesInitialized = false;
 export function getPool() {
   if (!_pool && process.env.DATABASE_URL) {
     try {
-      _pool = mysql.createPool(process.env.DATABASE_URL);
+      const url = process.env.DATABASE_URL;
+      const options: mysql.PoolOptions = {
+        uri: url,
+        charset: "utf8mb4",
+        waitForConnections: true,
+        connectionLimit: 10,
+        enableKeepAlive: true,
+      };
+      if (url.includes("tidbcloud.com") || url.includes("ssl")) {
+        options.ssl = {
+          minVersion: "TLSv1.2",
+          rejectUnauthorized: true,
+        };
+      }
+      _pool = mysql.createPool(options);
     } catch (error) {
       console.warn("[Database] Failed to create pool:", error);
     }

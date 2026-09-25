@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 import { sdk } from "./_core/sdk";
 import { businesses, offers, outreachMessages, tags } from "../drizzle/schema";
-import { getDb, listDashboardData, upsertUser } from "./db";
+import { ensureTablesExist, getDb, listDashboardData, upsertUser } from "./db";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -127,18 +127,28 @@ export const appRouter = router({
     create: adminProcedure.input(businessInput).mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) unavailableDatabase();
-      const result = await db.insert(businesses).values({
-        name: input.name.trim(),
-        segment: input.segment?.trim() || null,
-        city: input.city?.trim() || null,
-        contactName: input.contactName?.trim() || null,
-        phone: input.phone?.trim() || null,
-        email: input.email?.trim() || null,
-        notes: input.notes?.trim() || null,
-        stage: "lead",
-        consentStatus: "unknown",
-      });
-      return { success: true, id: Number(result[0]?.insertId) } as const;
+      try {
+        await ensureTablesExist();
+        const result = await db.insert(businesses).values({
+          name: input.name.trim(),
+          segment: input.segment?.trim() || null,
+          city: input.city?.trim() || null,
+          contactName: input.contactName?.trim() || null,
+          phone: input.phone?.trim() || null,
+          email: input.email?.trim() || null,
+          notes: input.notes?.trim() || null,
+          stage: "lead",
+          consentStatus: "unknown",
+        });
+        return { success: true, id: Number(result[0]?.insertId) } as const;
+      } catch (err: any) {
+        console.error("[Business Create Error]:", err);
+        const detailed = err?.sqlMessage || err?.cause?.message || err?.message || String(err);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Erro ao salvar empresa no banco: ${detailed}`,
+        });
+      }
     }),
     updateStage: adminProcedure.input(z.object({ id: idInput, stage: stages })).mutation(async ({ input }) => {
       const db = await getDb();
