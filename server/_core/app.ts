@@ -69,7 +69,7 @@ export function createApp(): express.Express {
     res.status(200).send("<!doctype html><html lang=\"pt-BR\"><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta charset=\"utf-8\"><title>Modelo de QR dinâmico</title></head><body style=\"margin:0;min-height:100vh;background:#08111f;color:#fff;font-family:Arial,sans-serif;display:grid;place-items:center;padding:24px\"><main style=\"max-width:460px;text-align:center\"><div style=\"width:84px;height:84px;border-radius:24px;background:#06b6d4;margin:0 auto 20px\"></div><h1>Modelo de QR dinâmico</h1><p style=\"color:#a9b6c8;line-height:1.6\">Este endereço é um modelo visual. No uso real, cada cliente recebe um código único em /t/SEU-CODIGO e o destino pode ser alterado no painel sem regravar o QR.</p></main></body></html>");
   });
 
-  app.get("/t/:code", publicRedirectLimiter, async (req, res) => {
+  app.get(["/t/:code", "/r/:code"], publicRedirectLimiter, async (req, res) => {
     const code = req.params.code;
     if (!/^TD[A-Z0-9_-]{6,12}$/i.test(code)) return res.status(404).send("Tag não encontrada ou inativa");
     

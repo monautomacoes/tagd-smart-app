@@ -115,7 +115,7 @@ export function PlatePrintGenerator({
   const targetUrl = useMemo(() => {
     if (currentTag) {
       const origin = typeof window !== "undefined" ? window.location.origin : "https://tagd-smart-app.vercel.app";
-      return `${origin}/r/${currentTag.code}`;
+      return `${origin}/t/${currentTag.code}`;
     }
     return currentBusiness?.phone
       ? `https://wa.me/55${currentBusiness.phone.replace(/\D/g, "")}`

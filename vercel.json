@@ -12,6 +12,10 @@
       "destination": "/api/index.ts"
     },
     {
+      "source": "/r/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
       "source": "/modelo",
       "destination": "/api/index.ts"
     },
