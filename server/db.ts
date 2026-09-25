@@ -45,12 +45,12 @@ export async function ensureTablesExist() {
       CREATE TABLE IF NOT EXISTS \`businesses\` (
         \`id\` int AUTO_INCREMENT NOT NULL,
         \`name\` varchar(180) NOT NULL,
-        \`segment\` varchar(100),
-        \`city\` varchar(120),
-        \`contactName\` varchar(140),
-        \`phone\` varchar(40),
-        \`email\` varchar(320),
-        \`notes\` text,
+        \`segment\` varchar(100) DEFAULT NULL,
+        \`city\` varchar(120) DEFAULT NULL,
+        \`contactName\` varchar(140) DEFAULT NULL,
+        \`phone\` varchar(40) DEFAULT NULL,
+        \`email\` varchar(320) DEFAULT NULL,
+        \`notes\` text DEFAULT NULL,
         \`stage\` enum('lead','contacted','demo','proposal','won','lost') NOT NULL DEFAULT 'lead',
         \`consentStatus\` enum('unknown','allowed','blocked') NOT NULL DEFAULT 'unknown',
         \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -63,10 +63,10 @@ export async function ensureTablesExist() {
       CREATE TABLE IF NOT EXISTS \`offers\` (
         \`id\` int AUTO_INCREMENT NOT NULL,
         \`title\` varchar(180) NOT NULL,
-        \`segment\` varchar(100),
+        \`segment\` varchar(100) DEFAULT NULL,
         \`description\` text NOT NULL,
         \`cta\` varchar(140) NOT NULL DEFAULT 'Quero uma demonstração',
-        \`validUntil\` timestamp NULL,
+        \`validUntil\` timestamp NULL DEFAULT NULL,
         \`active\` int NOT NULL DEFAULT 1,
         \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(\`id\`)
@@ -78,21 +78,22 @@ export async function ensureTablesExist() {
         \`id\` int AUTO_INCREMENT NOT NULL,
         \`businessId\` int NOT NULL,
         \`code\` varchar(32) NOT NULL,
+        \`plateNumber\` varchar(60) DEFAULT NULL,
         \`label\` varchar(140) NOT NULL,
-        \`material\` varchar(80),
-        \`placement\` varchar(100),
+        \`material\` varchar(80) DEFAULT NULL,
+        \`placement\` varchar(100) DEFAULT NULL,
         \`destinationType\` enum('google','whatsapp','instagram','tiktok','multilink','webhook','custom') NOT NULL DEFAULT 'multilink',
         \`destinationUrl\` text NOT NULL,
-        \`multilinkConfig\` text,
-        \`whatsappMessage\` text,
+        \`multilinkConfig\` text DEFAULT NULL,
+        \`whatsappMessage\` text DEFAULT NULL,
         \`status\` enum('active','paused','draft') NOT NULL DEFAULT 'active',
         \`programmingStatus\` enum('not_programmed','programmed','protected') NOT NULL DEFAULT 'not_programmed',
-        \`nfcModel\` varchar(60),
-        \`protectionNote\` text,
-        \`programmedAt\` timestamp NULL,
-        \`protectedAt\` timestamp NULL,
+        \`nfcModel\` varchar(60) DEFAULT NULL,
+        \`protectionNote\` text DEFAULT NULL,
+        \`programmedAt\` timestamp NULL DEFAULT NULL,
+        \`protectedAt\` timestamp NULL DEFAULT NULL,
         \`scans\` int NOT NULL DEFAULT 0,
-        \`lastScannedAt\` timestamp NULL,
+        \`lastScannedAt\` timestamp NULL DEFAULT NULL,
         \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY(\`id\`),
@@ -104,17 +105,24 @@ export async function ensureTablesExist() {
       CREATE TABLE IF NOT EXISTS \`outreachMessages\` (
         \`id\` int AUTO_INCREMENT NOT NULL,
         \`businessId\` int NOT NULL,
-        \`offerId\` int,
+        \`offerId\` int DEFAULT NULL,
         \`channel\` enum('whatsapp','email','instagram','manual') NOT NULL DEFAULT 'manual',
-        \`subject\` varchar(180),
+        \`subject\` varchar(180) DEFAULT NULL,
         \`body\` text NOT NULL,
         \`status\` enum('draft','queued','sent','replied','opted_out') NOT NULL DEFAULT 'draft',
-        \`scheduledFor\` timestamp NULL,
-        \`sentAt\` timestamp NULL,
+        \`scheduledFor\` timestamp NULL DEFAULT NULL,
+        \`sentAt\` timestamp NULL DEFAULT NULL,
         \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(\`id\`)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // Migration de compatibilidade para colunas adicionadas
+    try {
+      await pool.query(`ALTER TABLE \`tags\` ADD COLUMN \`plateNumber\` varchar(60) DEFAULT NULL;`);
+    } catch {
+      // Ignora se a coluna já existir
+    }
 
     _tablesInitialized = true;
     console.log("[Database] Tables verified and created if missing");

@@ -127,8 +127,18 @@ export const appRouter = router({
     create: adminProcedure.input(businessInput).mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) unavailableDatabase();
-      await db.insert(businesses).values(input);
-      return { success: true } as const;
+      const result = await db.insert(businesses).values({
+        name: input.name.trim(),
+        segment: input.segment?.trim() || null,
+        city: input.city?.trim() || null,
+        contactName: input.contactName?.trim() || null,
+        phone: input.phone?.trim() || null,
+        email: input.email?.trim() || null,
+        notes: input.notes?.trim() || null,
+        stage: "lead",
+        consentStatus: "unknown",
+      });
+      return { success: true, id: Number(result[0]?.insertId) } as const;
     }),
     updateStage: adminProcedure.input(z.object({ id: idInput, stage: stages })).mutation(async ({ input }) => {
       const db = await getDb();
@@ -144,11 +154,67 @@ export const appRouter = router({
       const db = await getDb();
       if (!db) unavailableDatabase();
       await requireBusiness(db, input.businessId);
-      const code = `TD${randomBytes(6).toString("base64url").toUpperCase()}`;
+      const code = `TD${randomBytes(6).toString("base64url").toUpperCase().replace(/[^A-Z0-9]/g, "X")}`;
       const destinationUrl = safeDestination(input.destinationUrl || "https://example.com/");
       const plateNumber = input.plateNumber ? input.plateNumber.trim().toUpperCase() : null;
-      const result = await db.insert(tags).values({ ...input, plateNumber, destinationUrl, code });
+      const result = await db.insert(tags).values({
+        businessId: input.businessId,
+        code,
+        plateNumber,
+        label: input.label.trim(),
+        material: input.material?.trim() || null,
+        placement: input.placement?.trim() || null,
+        destinationType: input.destinationType,
+        destinationUrl,
+        multilinkConfig: null,
+        whatsappMessage: input.whatsappMessage?.trim() || null,
+        status: "active",
+        programmingStatus: "not_programmed",
+        nfcModel: null,
+        protectionNote: null,
+      });
       return { success: true, code, id: Number(result[0].insertId) } as const;
+    }),
+    createBatch: adminProcedure.input(z.object({
+      businessId: idInput,
+      count: z.number().int().min(1).max(200),
+      platePrefix: z.string().trim().max(30).default("PLACA-"),
+      startNumber: z.number().int().min(1).default(1),
+      destinationType: destinationTypes.default("google"),
+      destinationUrl: optionalUrl,
+      material: optionalText(80),
+      placement: optionalText(100),
+    })).mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) unavailableDatabase();
+      await requireBusiness(db, input.businessId);
+      const fallbackUrl = input.destinationUrl ? safeDestination(input.destinationUrl) : "https://tagd-smart-app.vercel.app";
+      const created: Array<{ code: string; plateNumber: string; id: number }> = [];
+
+      for (let i = 0; i < input.count; i++) {
+        const num = input.startNumber + i;
+        const plateNumber = `${input.platePrefix}${String(num).padStart(3, "0")}`;
+        const code = `TD${randomBytes(6).toString("base64url").toUpperCase().replace(/[^A-Z0-9]/g, "X")}`;
+        const result = await db.insert(tags).values({
+          businessId: input.businessId,
+          code,
+          plateNumber,
+          label: `${plateNumber}`,
+          material: input.material?.trim() || "Acrílico 10x10",
+          placement: input.placement?.trim() || "Balcão / Mesa",
+          destinationType: input.destinationType,
+          destinationUrl: fallbackUrl,
+          multilinkConfig: null,
+          whatsappMessage: null,
+          status: "active",
+          programmingStatus: "not_programmed",
+          nfcModel: "NTAG215",
+          protectionNote: null,
+        });
+        created.push({ code, plateNumber, id: Number(result[0].insertId) });
+      }
+
+      return { success: true, count: created.length, plates: created } as const;
     }),
     updateDestination: adminProcedure.input(z.object({
       id: idInput,
@@ -228,7 +294,14 @@ export const appRouter = router({
     create: adminProcedure.input(z.object({ title: z.string().trim().min(2).max(180), segment: optionalText(100), description: z.string().trim().min(5).max(5000), cta: z.string().trim().max(140).optional(), validUntil: z.coerce.date().optional() })).mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) unavailableDatabase();
-      await db.insert(offers).values(input);
+      await db.insert(offers).values({
+        title: input.title.trim(),
+        segment: input.segment?.trim() || null,
+        description: input.description.trim(),
+        cta: input.cta?.trim() || "Quero uma demonstração",
+        validUntil: input.validUntil || null,
+        active: 1,
+      });
       return { success: true } as const;
     }),
   }),
@@ -239,7 +312,16 @@ export const appRouter = router({
       if (!db) unavailableDatabase();
       await requireBusiness(db, input.businessId);
       if (input.offerId) await requireOffer(db, input.offerId);
-      await db.insert(outreachMessages).values(input);
+      await db.insert(outreachMessages).values({
+        businessId: input.businessId,
+        offerId: input.offerId || null,
+        channel: input.channel,
+        subject: input.subject?.trim() || null,
+        body: input.body.trim(),
+        status: "draft",
+        scheduledFor: input.scheduledFor || null,
+        sentAt: null,
+      });
       return { success: true } as const;
     }),
     markOptedOut: adminProcedure.input(z.object({ id: idInput })).mutation(async ({ input }) => {

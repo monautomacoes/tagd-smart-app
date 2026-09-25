@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Activity, AlertCircle, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Copy, Download, Link2, Loader2, MessageSquareText, Plus, QrCode, Radio, ShieldCheck, Target, Users } from "lucide-react";
+import { Activity, AlertCircle, ArrowUpRight, BriefcaseBusiness, CheckCircle2, Copy, Download, Layers, Link2, Loader2, MessageSquareText, Plus, Printer, QrCode, Radio, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
 import { toast } from "sonner";
 import { LocalQr } from "@/components/LocalQr";
+import { PlatePrintGenerator } from "@/components/PlatePrintGenerator";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const stages = ["lead", "contacted", "demo", "proposal", "won", "lost"] as const;
@@ -254,6 +255,8 @@ export default function Home() {
   const [nfcMessage, setNfcMessage] = useState("");
   const [nfcCapability, setNfcCapability] = useState<"checking" | "available" | "fallback">("checking");
   const [activeTab, setActiveTab] = useState("overview");
+  const [generatorBusinessId, setGeneratorBusinessId] = useState<number | undefined>(undefined);
+  const [generatorTagId, setGeneratorTagId] = useState<number | undefined>(undefined);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const reportNfc = (status: NfcStatus, message = "") => {
@@ -398,9 +401,16 @@ export default function Home() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
-          <TabsList className="bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+          <TabsList className="bg-white p-1 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-1">
             <TabsTrigger value="overview" className="rounded-lg">Visão Geral</TabsTrigger>
             <TabsTrigger value="tags" className="rounded-lg font-semibold text-cyan-800">Placas & Tags</TabsTrigger>
+            <TabsTrigger
+              value="generator"
+              className="rounded-lg font-bold text-amber-900 bg-amber-50/80 border border-amber-300/80 data-[state=active]:bg-amber-500 data-[state=active]:text-slate-950 shadow-xs"
+            >
+              <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+              Gerador & Impressão
+            </TabsTrigger>
             <TabsTrigger value="nfc" className="rounded-lg">Programador NFC</TabsTrigger>
             <TabsTrigger value="multilink" className="rounded-lg">Página MultiLink</TabsTrigger>
             <TabsTrigger value="prospecting" className="rounded-lg">Empresas</TabsTrigger>
@@ -585,13 +595,22 @@ export default function Home() {
                 <CardHeader className="pb-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <CardTitle className="text-lg">Placas Cadastradas ({filteredTags.length})</CardTitle>
-                    <div className="w-full sm:w-64">
-                      <Input
-                        placeholder="Buscar por placa, código ou empresa..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="h-9 text-xs"
-                      />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => setActiveTab("generator")}
+                        className="h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-xs"
+                      >
+                        <Layers className="mr-1.5 h-3.5 w-3.5" /> Gerar Lote / Imprimir
+                      </Button>
+                      <div className="w-full sm:w-56">
+                        <Input
+                          placeholder="Buscar por placa, código..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          className="h-9 text-xs"
+                        />
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
@@ -668,6 +687,18 @@ export default function Home() {
                               <Button
                                 size="sm"
                                 variant="outline"
+                                className="h-8 text-xs font-semibold text-amber-950 border-amber-300 bg-amber-50 hover:bg-amber-100"
+                                onClick={() => {
+                                  setGeneratorBusinessId(tag.businessId);
+                                  setGeneratorTagId(tag.id);
+                                  setActiveTab("generator");
+                                }}
+                              >
+                                <Printer className="mr-1 h-3 w-3 text-amber-600" /> Imprimir Placa
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
                                 className="h-8 text-xs"
                                 onClick={() => window.open(url, "_blank")}
                               >
@@ -720,6 +751,17 @@ export default function Home() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* TAB: GERADOR DE PLACAS & IMPRESSÃO */}
+          <TabsContent value="generator" className="mt-6">
+            <PlatePrintGenerator
+              businesses={businesses}
+              tags={tags}
+              onRefreshData={() => refetch()}
+              defaultBusinessId={generatorBusinessId}
+              defaultTagId={generatorTagId}
+            />
           </TabsContent>
 
           {/* TAB: PROGRAMADOR NFC */}
@@ -1171,7 +1213,11 @@ export default function Home() {
                     className="space-y-4"
                     onSubmit={e => {
                       e.preventDefault();
-                      createBusiness.mutate({ name: businessName, segment, phone });
+                      createBusiness.mutate({
+                        name: businessName.trim(),
+                        segment: segment.trim() || undefined,
+                        phone: phone.trim() || undefined,
+                      });
                     }}
                   >
                     <div>
