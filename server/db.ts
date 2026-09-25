@@ -7,6 +7,37 @@ import { ENV } from "./_core/env";
 let _db: ReturnType<typeof drizzle> | null = null;
 let _pool: mysql.Pool | null = null;
 let _tablesInitialized = false;
+let _databaseCreated = false;
+
+export async function ensureDatabaseExists() {
+  if (_databaseCreated || !process.env.DATABASE_URL) return;
+  try {
+    const rawUrl = process.env.DATABASE_URL;
+    const urlObj = new URL(rawUrl.replace(/^mysql:\/\//, "http://"));
+    const targetDb = urlObj.pathname.replace(/^\//, "");
+    if (!targetDb || targetDb === "test") {
+      _databaseCreated = true;
+      return;
+    }
+
+    const bootstrapPool = mysql.createPool({
+      host: urlObj.hostname,
+      port: urlObj.port ? parseInt(urlObj.port, 10) : 4000,
+      user: decodeURIComponent(urlObj.username),
+      password: decodeURIComponent(urlObj.password),
+      database: "test",
+      charset: "utf8mb4",
+      ssl: { minVersion: "TLSv1.2", rejectUnauthorized: true },
+    });
+
+    await bootstrapPool.query(`CREATE DATABASE IF NOT EXISTS \`${targetDb}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
+    await bootstrapPool.end();
+    _databaseCreated = true;
+    console.log(`[Database] Database '${targetDb}' verified/created on TiDB Cloud.`);
+  } catch (err) {
+    console.warn("[Database] ensureDatabaseExists warning:", err);
+  }
+}
 
 export function getPool() {
   if (!_pool && process.env.DATABASE_URL) {
@@ -35,6 +66,7 @@ export function getPool() {
 
 export async function ensureTablesExist() {
   if (_tablesInitialized) return;
+  await ensureDatabaseExists();
   const pool = getPool();
   if (!pool) return;
 
